@@ -458,3 +458,71 @@ body {
 .content-area.show-prompts .prompt-text {
     display: block !important;
 }
+
+/* ===== 移动端适配 ===== */
+#hamburgerBtn {
+    display: none;
+    font-size: 20px;
+    background: #2a2a4a;
+    color: #ffd866;
+    border: 1px solid #ffd866;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 900;
+}
+
+@media (max-width: 768px) {
+    #hamburgerBtn { display: block; }
+
+    .sidebar {
+        position: fixed;
+        left: 0; top: 0; bottom: 0;
+        width: 280px;
+        min-width: 280px;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: 2px 0 12px rgba(0,0,0,0.5);
+    }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    body.sidebar-open .sidebar-backdrop { display: block; }
+
+    .main-header {
+        padding: 10px 12px;
+    }
+    .main-header .title-area h1 { font-size: 16px; }
+    .main-header .title-area .chapter-num { font-size: 12px; }
+
+    .main-header .actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .main-header .actions button {
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+    }
+
+    .content-area {
+        padding: 16px 14px !important;
+    }
+    .chapter-content {
+        font-size: 16px !important;
+        line-height: 1.9 !important;
+    }
+    .chapter-title {
+        font-size: 20px !important;
+    }
+
+    .modal-content {
+        width: 95vw !important;
+        margin: 2vh auto;
+    }
+}

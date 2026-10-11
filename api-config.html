@@ -406,7 +406,8 @@
                     <option value="gemini-3.1-pro-preview">
                     <option value="gemini-2.0-flash">
                 </datalist>
-                <div class="hint" id="llmModelHint">💡 点击「获取模型」从 API 拉取，也可手动输入任意模型名称</div>
+                <div id="llmModelChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:140px;overflow-y:auto;"></div>
+                <div class="hint" id="llmModelHint">💡 点击「获取模型」从 API 拉取，点下面的模型名直接选中，也可手动输入</div>
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -816,18 +817,32 @@
                 if (data.success && data.models && data.models.length > 0) {
                     const datalist = document.getElementById('llmModelList');
                     datalist.innerHTML = '';
-                    
+                    const chips = document.getElementById('llmModelChips');
+                    chips.innerHTML = '';
+
                     const uniqueModels = [...new Set(data.models)];
-                    
+
                     for (const model of uniqueModels) {
                         const option = document.createElement('option');
                         option.value = model;
                         datalist.appendChild(option);
+                        // 可点击的小标签
+                        const chip = document.createElement('span');
+                        chip.textContent = model;
+                        chip.style.cssText = 'padding:4px 10px;background:#2a2a4a;color:#c0c0d0;border:1px solid #3a3a5a;border-radius:14px;font-size:12px;cursor:pointer;';
+                        chip.onclick = () => {
+                            document.getElementById('llmModel').value = model;
+                            document.getElementById('llmModel').dispatchEvent(new Event('input'));
+                            chips.querySelectorAll('span').forEach(s => s.style.background = '#2a2a4a');
+                            chip.style.background = '#ffd866';
+                            chip.style.color = '#1a1a2e';
+                        };
+                        chips.appendChild(chip);
                     }
-                    
-                    document.getElementById('llmModelHint').textContent = 
-                        `✅ 已获取 ${uniqueModels.length} 个模型，点击输入框查看下拉列表，也可手动输入`;
-                    
+
+                    document.getElementById('llmModelHint').textContent =
+                        `✅ 已获取 ${uniqueModels.length} 个模型，点下面标签直接选`;
+
                     showToast(`✅ 获取到 ${uniqueModels.length} 个模型`, 'success');
                 } else {
                     document.getElementById('llmModelHint').textContent = 

@@ -112,7 +112,7 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 只输出 JSON 数组，不要任何解释：
 [{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文定位句"}]`;
 
-async function analyzeChapters(title, content, model, instruction = '') {
+async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5) {
     if (!LLM_API_KEY) {
         return [
             { scene: '主角站在山巅眺望远方', prompt: 'A lone figure standing on a mountain peak, overlooking a vast fantasy landscape, dramatic sunset lighting, epic scale, digital art, high quality', anchor: '主角站在山巅，目光投向远方' },
@@ -132,7 +132,7 @@ async function analyzeChapters(title, content, model, instruction = '') {
             console.warn(`⚠️ 第 ${i + 1} 段分析失败:`, e.message);
         }
     }
-    return allScenes.slice(0, 5);
+    return allScenes.slice(0, maxScenes);
 }
 
 // ============================================================
@@ -531,7 +531,51 @@ app.get('/api/novelai-models', (req, res) => {
     res.json({ success: true, models: ['nai-diffusion-5-full', 'nai-diffusion-5', 'nai-diffusion-4-full', 'nai-diffusion-4', 'nai-diffusion-3'] });
 });
 
-// ---- 一站式：分析 + 生图 + 入库 ----
+// ---- 只做 LLM 分析（返回场景列表，不生图）----
+app.post('/api/analyze-only', async (req, res) => {
+    try {
+        const { title, content, model, analyzeTemplate, maxScenes } = req.body;
+        if (!content) return res.status(400).json({ error: '缺少章节内容' });
+        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5);
+        res.json({ success: true, scenes });
+    } catch (e) {
+        console.error('分析失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 单场景生图（前端逐张调用，可显示进度）----
+app.post('/api/generate-scene', async (req, res) => {
+    try {
+        const { prompt, negative_prompt, engine = 'comfyui', workflowConfig } = req.body;
+        const pre = req.body.promptPrefix || '';
+        const suf = req.body.promptSuffix || '';
+        const wrapped = wrapPrompt(prompt, { promptPrefix: pre, promptSuffix: suf });
+        let image, seed;
+        if (engine === 'novelai') {
+            const urls = await generateNovelAIImage({ ...req.body, prompt: wrapped, negative_prompt: negative_prompt || '' });
+            image = urls[0];
+        } else if (engine === 'grok') {
+            const r = await generateGrokImage({
+                prompt: wrapped,
+                apiUrl: req.body.apiUrl,
+                apiKey: req.body.apiKey,
+                model: req.body.grokModel,
+                width: req.body.width,
+                height: req.body.height
+            });
+            image = r.url;
+        } else {
+            const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {});
+            image = r.url; seed = r.seed;
+        }
+        res.json({ success: true, image, seed });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 一站式：分析 + 生图 + 入库（保留兼容）----
 app.post('/api/analyze-and-generate', async (req, res) => {
     try {
         const { title, content, model, engine = 'comfyui', workflowConfig, chapterId, promptTemplate, negativeTemplate, analyzeTemplate } = req.body;
