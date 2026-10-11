@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 ComfyUI 生图配置</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .config-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* 头部 */
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .config-header h2 {
+            color: #ffd866;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .config-header .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        .config-header .status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .config-header .status .dot.online {
+            background: #4ade80;
+        }
+        .config-header .status .dot.offline {
+            background: #f87171;
+        }
+        .config-header .status .dot.checking {
+            background: #fbbf24;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* 卡片 */
+        .card {
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #8888aa;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .badge {
+            font-size: 11px;
+            background: #2a2a4a;
+            padding: 1px 8px;
+            border-radius: 10px;
+            color: #666;
+            font-weight: normal;
+        }
+        /* ✅ 保存状态指示器 */
+        .save-status {
+            font-size: 11px;
+            color: #4ade80;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .save-status.show {
+            opacity: 1;
+        }
+        .save-status.saving {
+            color: #fbbf24;
+        }
+
+        /* 表单 */
+        .form-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .form-group {
+            flex: 1;
+            min-width: 160px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            color: #8888aa;
+            margin-bottom: 4px;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            font-size: 13px;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #ffd866;
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+            font-family: inherit;
+        }
+        .form-group .hint {
+            font-size: 11px;
+            color: #555;
+            margin-top: 3px;
+        }
+
+        /* 按钮 */
+        .btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn-primary {
+            background: #ffd866;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #ffe080;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: #2a2a4a;
+            color: #c0c0d0;
+        }
+        .btn-secondary:hover {
+            background: #3a3a5a;
+        }
+        .btn-success {
+            background: #4ade80;
+            color: #1a1a2e;
+        }
+        .btn-success:hover {
+            background: #5be890;
+        }
+        .btn-danger {
+            background: #f87171;
+            color: #1a1a2e;
+        }
+        .btn-danger:hover {
+            background: #fc8181;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        /* 工作流库 */
+        .workflow-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .workflow-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #0f0f1a;
+            border-radius: 6px;
+            border: 1px solid #1a1a3a;
+            transition: all 0.2s;
+        }
+        .workflow-item:hover {
+            border-color: #2a2a4a;
+        }
+        .workflow-item .name {
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .workflow-item .name .tag {
+            font-size: 10px;
+            background: #2a2a4a;
+            padding: 1px 8px;
+            border-radius: 10px;
+            color: #8888aa;
+        }
+        .workflow-item .actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        /* 状态行 */
+        .status-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 6px 0;
+        }
+        .status-row .item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #8888aa;
+        }
+        .status-row .item .val {
+            color: #e0e0e0;
+        }
+
+        /* 折叠面板 */
+        .collapse-toggle {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #8888aa;
+            font-size: 13px;
+        }
+        .collapse-toggle:hover {
+            color: #e0e0e0;
+        }
+        .collapse-toggle .arrow {
+            transition: transform 0.3s;
+            display: inline-block;
+        }
+        .collapse-toggle .arrow.open {
+            transform: rotate(90deg);
+        }
+        .collapse-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0;
+        }
+        .collapse-content.open {
+            max-height: 800px;
+            padding: 12px 0 0 0;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a3a;
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            font-size: 14px;
+            z-index: 999;
+            animation: fadeInUp 0.3s ease;
+            max-width: 90%;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; }
+            .config-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+            .workflow-item { flex-wrap: wrap; gap: 6px; }
+            .workflow-item .actions { width: 100%; justify-content: flex-end; }
+        }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <!-- 头部 -->
+        <div class="config-header">
+            <h2>🎨 ComfyUI 生图配置</h2>
+            <div class="status">
+                <span class="dot checking" id="statusDot"></span>
+                <span id="statusText">检测中...</span>
+                <button class="btn btn-sm btn-secondary" id="checkStatusBtn">重新检测</button>
+            </div>
+        </div>
+
+        <!-- ====== 基础配置 ====== -->
+        <div class="card">
+            <div class="card-title">
+                🔧 服务配置
+                <span class="save-status" id="saveStatus">✅ 已保存</span>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>ComfyUI URL</label>
+                    <input type="text" id="comfyUrl" value="http://127.0.0.1:8188" placeholder="http://127.0.0.1:8188">
+                    <div class="hint">需要 ComfyUI 允许跨域访问；局域网访问需监听 0.0.0.0</div>
+                </div>
+                <div class="form-group" style="min-width:120px;flex:0.5;">
+                    <label>请求超时（秒）</label>
+                    <input type="number" id="timeout" value="600" min="10">
+                </div>
+                <div class="form-group" style="min-width:120px;flex:0.5;">
+                    <label>RPM 上限</label>
+                    <input type="number" id="rpmLimit" placeholder="留空不限制" min="1">
+                    <div class="hint">每分钟请求次数限制</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== 工作流管理 ====== -->
+        <div class="card">
+            <div class="card-title">
+                📋 工作流管理
+                <span class="badge" id="workflowCount">0 个</span>
+                <span class="save-status" id="saveStatus2">✅ 已保存</span>
+            </div>
+
+            <!-- 工作流列表 -->
+            <div class="workflow-list" id="workflowList">
+                <div style="text-align:center;padding:20px;color:#555;font-size:14px;">
+                    暂无工作流，点击下方「新增工作流」创建
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" id="addWorkflowBtn">➕ 新增工作流</button>
+                <button class="btn btn-secondary" id="copyWorkflowBtn">📋 复制当前</button>
+                <button class="btn btn-secondary" id="deleteWorkflowBtn">🗑️ 删除</button>
+            </div>
+        </div>
+
+        <!-- ====== 当前工作流详情 ====== -->
+        <div class="card" id="workflowDetail">
+            <div class="card-title">
+                📝 工作流详情
+                <span class="badge" id="currentWorkflowName">未选择</span>
+                <span class="save-status" id="saveStatus3">✅ 已保存</span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>工作流名称</label>
+                    <input type="text" id="wfName" placeholder="例如：正文生图默认工作流">
+                </div>
+                <div class="form-group">
+                    <label>ComfyUI URL（可覆盖全局）</label>
+                    <input type="text" id="wfUrl" placeholder="留空则使用全局 URL">
+                </div>
+            </div>
+
+            <!-- 导入工作流 JSON -->
+            <div class="form-group" style="margin-bottom:10px;">
+                <label>导入工作流 JSON</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <input type="file" id="workflowFileInput" accept=".json" style="display:none;">
+                    <button class="btn btn-secondary btn-sm" id="importWorkflowBtn">📂 选择文件</button>
+                    <span id="importStatus" style="font-size:12px;color:#666;">未选择文件</span>
+                </div>
+                <div class="hint">导入 JSON 工作流文件，或在下方面板中直接粘贴</div>
+            </div>
+
+            <!-- 工作流 JSON 编辑区 -->
+            <div class="collapse-toggle" id="jsonToggle">
+                <span class="arrow">▶</span> 工作流 JSON 编辑区
+            </div>
+            <div class="collapse-content" id="jsonContent">
+                <textarea id="workflowJson" rows="8" style="width:100%;padding:10px;border-radius:6px;border:1px solid #2a2a4a;background:#0f0f1a;color:#e0e0e0;font-family:'Courier New',monospace;font-size:12px;resize:vertical;" placeholder="粘贴工作流 JSON 数据..."></textarea>
+            </div>
+
+            <!-- 节点映射 -->
+            <div class="form-row" style="margin-top:12px;">
+                <div class="form-group">
+                    <label>正面提示词节点 ID / 标题</label>
+                    <input type="text" id="positiveNode" value="6" placeholder="例如：6 或 CLIPTextEncode">
+                    <div class="hint">填 ID 最稳；填标题会匹配第一个匹配的节点</div>
+                </div>
+                <div class="form-group">
+                    <label>负面提示词节点 ID / 标题</label>
+                    <input type="text" id="negativeNode" value="7" placeholder="留空则保留工作流原有内容">
+                    <div class="hint">留空负面提示词时会保留工作流原有内容</div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Seed 节点 ID / 标题</label>
+                    <input type="text" id="seedNode" placeholder="例如：SamplerCustom 或 noise_seed">
+                    <div class="hint">留空则不覆盖 seed</div>
+                </div>
+                <div class="form-group">
+                    <label>轮询间隔（ms）</label>
+                    <input type="number" id="pollInterval" value="1200" min="500">
+                </div>
+            </div>
+
+            <!-- 永久提示词 -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>永久正向提示词</label>
+                    <textarea id="permanentPositive" rows="3" placeholder="杰作，顶级画质，超高分辨率...">杰作，顶级画质，超高分辨率，极致细节，二次元插画，厚涂笔触，半写实二次元，体积光，轮廓光，色彩层次丰富，柔和画笔质感，发丝高光精细，服装花纹细节拉满，精致脸庞，锐利眼神，戏剧光影，暗幻想背景，景深效果，漂浮光粒，浮尘，概念原画，角色立绘，artstation 热门作品，高对比，层次阴影</textarea>
+                    <div class="hint">每次提交 ComfyUI 前都会拼进正面提示词节点；留空则不追加。</div>
+                </div>
+                <div class="form-group" style="min-width:120px;flex:0.4;">
+                    <label>提示词位置</label>
+                    <select id="promptPosition">
+                        <option value="prefix">前置</option>
+                        <option value="suffix">后置</option>
+                    </select>
+                    <div class="hint">前置放在基础提示词前；后置放在基础提示词后</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>默认负面提示词</label>
+                <input type="text" id="defaultNegative" placeholder="lowres, bad anatomy..." value="lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry">
+                <div class="hint">留空则不覆盖负面节点；手动生成时传入的负面提示词会与这里合并</div>
+            </div>
+
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-success" id="saveWorkflowBtn">💾 保存工作流</button>
+                <button class="btn btn-primary" id="testWorkflowBtn">🧪 测试连接</button>
+            </div>
+        </div>
+
+        <!-- ====== 快捷操作 ====== -->
+        <div class="card">
+            <div class="card-title">
+                ⚡ 快捷操作
+                <span class="save-status" id="saveStatus4">✅ 已保存</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="quickTestBtn">🖼️ 快速测试生图</button>
+                <button class="btn btn-secondary" id="resetConfigBtn">🔄 重置配置</button>
+                <button class="btn btn-secondary" id="exportConfigBtn">📤 导出配置</button>
+                <button class="btn btn-secondary" id="importConfigBtn">📥 导入配置</button>
+                <input type="file" id="configFileInput" accept=".json" style="display:none;">
+            </div>
+        </div>
+
+        <!-- ====== 状态信息 ====== -->
+        <div class="card">
+            <div class="card-title">📊 状态信息</div>
+            <div class="status-row">
+                <span class="item">状态：<span class="val" id="statusDetail">未连接</span></span>
+                <span class="item">模型：<span class="val" id="modelInfo">未知</span></span>
+                <span class="item">队列：<span class="val" id="queueInfo">0</span></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  1. 数据管理
+        // ============================================================
+        let workflows = [];
+        let currentWorkflowIndex = -1;
+        let config = {
+            comfyUrl: 'http://127.0.0.1:8188',
+            timeout: 600,
+            rpmLimit: null,
+            workflows: []
+        };
+
+        // DOM 引用
+        const comfyUrl = document.getElementById('comfyUrl');
+        const timeout = document.getElementById('timeout');
+        const rpmLimit = document.getElementById('rpmLimit');
+        const workflowList = document.getElementById('workflowList');
+        const workflowCount = document.getElementById('workflowCount');
+        const currentWorkflowName = document.getElementById('currentWorkflowName');
+        const wfName = document.getElementById('wfName');
+        const wfUrl = document.getElementById('wfUrl');
+        const workflowJson = document.getElementById('workflowJson');
+        const positiveNode = document.getElementById('positiveNode');
+        const negativeNode = document.getElementById('negativeNode');
+        const seedNode = document.getElementById('seedNode');
+        const pollInterval = document.getElementById('pollInterval');
+        const permanentPositive = document.getElementById('permanentPositive');
+        const promptPosition = document.getElementById('promptPosition');
+        const defaultNegative = document.getElementById('defaultNegative');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const statusDetail = document.getElementById('statusDetail');
+        const modelInfo = document.getElementById('modelInfo');
+        const queueInfo = document.getElementById('queueInfo');
+        const importStatus = document.getElementById('importStatus');
+        const jsonToggle = document.getElementById('jsonToggle');
+        const jsonContent = document.getElementById('jsonContent');
+
+        // ✅ 保存状态指示器
+        const saveStatusElements = [
+            document.getElementById('saveStatus'),
+            document.getElementById('saveStatus2'),
+            document.getElementById('saveStatus3'),
+            document.getElementById('saveStatus4')
+        ].filter(el => el !== null);
+
+        // ============================================================
+        //  2. Toast 提示
+        // ============================================================
+        function showToast(msg, type = 'info') {
+            const old = document.querySelector('.toast');
+            if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = msg;
+            const colors = {
+                info: '#1a1a3a',
+                success: '#1a3a2a',
+                error: '#3a1a1a'
+            };
+            toast.style.background = colors[type] || colors.info;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        // ============================================================
+        //  3. ✅ 保存状态指示器
+        // ============================================================
+        let saveStatusTimer = null;
+
+        function showSaveStatus(text = '✅ 已保存', duration = 1500) {
+            saveStatusElements.forEach(el => {
+                if (el) {
+                    el.textContent = text;
+                    el.classList.add('show');
+                    el.classList.remove('saving');
+                }
+            });
+            clearTimeout(saveStatusTimer);
+            saveStatusTimer = setTimeout(() => {
+                saveStatusElements.forEach(el => {
+                    if (el) el.classList.remove('show');
+                });
+            }, duration);
+        }
+
+        function showSavingStatus() {
+            saveStatusElements.forEach(el => {
+                if (el) {
+                    el.textContent = '⏳ 保存中...';
+                    el.classList.add('show');
+                    el.classList.add('saving');
+                }
+            });
+        }
+
+        // ============================================================
+        //  4. 工作流管理
+        // ============================================================
+        function renderWorkflows() {
+            if (!workflows || workflows.length === 0) {
+                workflowList.innerHTML = `
+                    <div style="text-align:center;padding:20px;color:#555;font-size:14px;">
+                        暂无工作流，点击「新增工作流」创建
+                    </div>
+                `;
+                workflowCount.textContent = '0 个';
+                return;
+            }
+
+            workflowCount.textContent = `${workflows.length} 个`;
+            let html = '';
+            for (let i = 0; i < workflows.length; i++) {
+                const wf = workflows[i];
+                const active = i === currentWorkflowIndex ? 'border-color:#ffd866;' : '';
+                const tags = [];
+                if (wf.isDefault) tags.push('默认');
+                if (wf.isPortrait) tags.push('肖像');
+                if (wf.isBody) tags.push('正文');
+                if (wf.isDual) tags.push('双修');
+                const tagHtml = tags.map(t => `<span class="tag">${t}</span>`).join('');
+
+                html += `
+                    <div class="workflow-item" style="${active}" data-index="${i}">
+                        <span class="name">
+                            ${wf.name || '未命名工作流'}
+                            ${tagHtml}
+                        </span>
+                        <div class="actions">
+                            <button class="btn btn-sm btn-secondary select-workflow" data-index="${i}">选择</button>
+                            <button class="btn btn-sm btn-secondary set-default" data-index="${i}">设为默认</button>
+                        </div>
+                    </div>
+                `;
+            }
+            workflowList.innerHTML = html;
+
+            // 事件绑定
+            workflowList.querySelectorAll('.select-workflow').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    selectWorkflow(idx);
+                });
+            });
+            workflowList.querySelectorAll('.set-default').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    setDefaultWorkflow(idx);
+                });
+            });
+
+            // 如果有选中的，更新详情
+            if (currentWorkflowIndex >= 0 && currentWorkflowIndex < workflows.length) {
+                loadWorkflowToForm(currentWorkflowIndex);
+            }
+        }
+
+        function selectWorkflow(index) {
+            if (index < 0 || index >= workflows.length) return;
+            currentWorkflowIndex = index;
+            loadWorkflowToForm(index);
+            renderWorkflows();
+            showToast(`已选择：${workflows[index].name || '未命名'}`);
+        }
+
+        function setDefaultWorkflow(index) {
+            if (index < 0 || index >= workflows.length) return;
+            workflows.forEach((wf, i) => wf.isDefault = i === index);
+            renderWorkflows();
+            saveConfig('⭐ 已设为默认');
+            showToast(`已设为默认：${workflows[index].name || '未命名'}`);
+        }
+
+        function loadWorkflowToForm(index) {
+            const wf = workflows[index];
+            if (!wf) return;
+            wfName.value = wf.name || '';
+            wfUrl.value = wf.url || '';
+            workflowJson.value = wf.workflowJson || '';
+            positiveNode.value = wf.positiveNode || '6';
+            negativeNode.value = wf.negativeNode || '7';
+            seedNode.value = wf.seedNode || '';
+            pollInterval.value = wf.pollInterval || 1200;
+            permanentPositive.value = wf.permanentPositive || '';
+            promptPosition.value = wf.promptPosition || 'prefix';
+            defaultNegative.value = wf.defaultNegative || '';
+            currentWorkflowName.textContent = wf.name || '未命名';
+            importStatus.textContent = wf.workflowJson ? '已导入 JSON' : '未导入';
+        }
+
+        function getFormWorkflow() {
+            return {
+                name: wfName.value.trim() || '未命名工作流',
+                url: wfUrl.value.trim() || '',
+                workflowJson: workflowJson.value.trim(),
+                positiveNode: positiveNode.value.trim() || '6',
+                negativeNode: negativeNode.value.trim() || '7',
+                seedNode: seedNode.value.trim() || '',
+                pollInterval: parseInt(pollInterval.value) || 1200,
+                permanentPositive: permanentPositive.value.trim(),
+                promptPosition: promptPosition.value,
+                defaultNegative: defaultNegative.value.trim(),
+                isDefault: false,
+                isPortrait: false,
+                isBody: false,
+                isDual: false
+            };
+        }
+
+        function addWorkflow() {
+            const newWf = getFormWorkflow();
+            newWf.isDefault = workflows.length === 0;
+            workflows.push(newWf);
+            currentWorkflowIndex = workflows.length - 1;
+            renderWorkflows();
+            loadWorkflowToForm(currentWorkflowIndex);
+            saveConfig('✅ 已新增工作流');
+            showToast('✅ 已新增工作流');
+        }
+
+        function deleteWorkflow() {
+            if (workflows.length === 0) return showToast('⚠️ 没有工作流可删除');
+            if (currentWorkflowIndex < 0 || currentWorkflowIndex >= workflows.length) {
+                return showToast('⚠️ 请先选择一个工作流');
+            }
+            if (!confirm(`确定删除「${workflows[currentWorkflowIndex].name || '未命名'}」吗？`)) return;
+            workflows.splice(currentWorkflowIndex, 1);
+            currentWorkflowIndex = workflows.length > 0 ? 0 : -1;
+            renderWorkflows();
+            if (currentWorkflowIndex >= 0) loadWorkflowToForm(currentWorkflowIndex);
+            saveConfig('🗑️ 已删除');
+            showToast('🗑️ 已删除');
+        }
+
+        function copyWorkflow() {
+            if (currentWorkflowIndex < 0 || currentWorkflowIndex >= workflows.length) {
+                return showToast('⚠️ 请先选择一个工作流');
+            }
+            const source = workflows[currentWorkflowIndex];
+            const copy = JSON.parse(JSON.stringify(source));
+            copy.name = (copy.name || '工作流') + ' - 副本';
+            copy.isDefault = false;
+            workflows.push(copy);
+            currentWorkflowIndex = workflows.length - 1;
+            renderWorkflows();
+            loadWorkflowToForm(currentWorkflowIndex);
+            saveConfig('📋 已复制');
+            showToast('📋 已复制工作流');
+        }
+
+        function saveWorkflow() {
+            if (currentWorkflowIndex < 0 || currentWorkflowIndex >= workflows.length) {
+                return showToast('⚠️ 请先选择一个工作流');
+            }
+            const data = getFormWorkflow();
+            workflows[currentWorkflowIndex] = { ...workflows[currentWorkflowIndex], ...data };
+            renderWorkflows();
+            loadWorkflowToForm(currentWorkflowIndex);
+            saveConfig('💾 已保存');
+            showToast('💾 已保存');
+        }
+
+        // ============================================================
+        //  5. ✅ 配置保存（增强版）
+        // ============================================================
+        function saveConfig(message) {
+            const data = {
+                comfyUrl: comfyUrl.value.trim(),
+                timeout: parseInt(timeout.value) || 600,
+                rpmLimit: rpmLimit.value ? parseInt(rpmLimit.value) : null,
+                workflows: workflows
+            };
+            try {
+                localStorage.setItem('comfyui_config', JSON.stringify(data));
+                // ✅ 显示保存状态
+                if (message) {
+                    showSaveStatus(message, 2000);
+                } else {
+                    showSaveStatus('✅ 已自动保存', 1200);
+                }
+            } catch (e) {
+                showSaveStatus('❌ 保存失败', 2000);
+                console.error('保存配置失败:', e);
+            }
+        }
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem('comfyui_config');
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                comfyUrl.value = data.comfyUrl || 'http://127.0.0.1:8188';
+                timeout.value = data.timeout || 600;
+                rpmLimit.value = data.rpmLimit || '';
+                workflows = data.workflows || [];
+                if (workflows.length > 0) {
+                    currentWorkflowIndex = 0;
+                    // 找到默认工作流
+                    const defaultIdx = workflows.findIndex(w => w.isDefault);
+                    if (defaultIdx >= 0) currentWorkflowIndex = defaultIdx;
+                    loadWorkflowToForm(currentWorkflowIndex);
+                }
+                renderWorkflows();
+                showSaveStatus('📥 配置已加载', 1500);
+            } catch (e) {
+                console.error('加载配置失败:', e);
+            }
+        }
+
+        function resetConfig() {
+            if (!confirm('确定重置所有配置吗？')) return;
+            localStorage.removeItem('comfyui_config');
+            workflows = [];
+            currentWorkflowIndex = -1;
+            comfyUrl.value = 'http://127.0.0.1:8188';
+            timeout.value = 600;
+            rpmLimit.value = '';
+            renderWorkflows();
+            saveConfig('🔄 已重置');
+            showToast('🔄 已重置配置');
+        }
+
+        function exportConfig() {
+            const data = {
+                comfyUrl: comfyUrl.value.trim(),
+                timeout: parseInt(timeout.value) || 600,
+                rpmLimit: rpmLimit.value ? parseInt(rpmLimit.value) : null,
+                workflows: workflows,
+                exportedAt: new Date().toISOString()
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `comfyui_config_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('📤 配置已导出');
+        }
+
+        function importConfig() {
+            document.getElementById('configFileInput').click();
+        }
+
+        // ============================================================
+        //  6. ComfyUI 连接检测
+        // ============================================================
+        async function checkComfyStatus() {
+            const url = comfyUrl.value.trim();
+            statusDot.className = 'dot checking';
+            statusText.textContent = '检测中...';
+            statusDetail.textContent = '检测中...';
+
+            try {
+                const res = await fetch(`${url}/system_stats`, {
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    statusDot.className = 'dot online';
+                    statusText.textContent = '🟢 已连接';
+                    statusDetail.textContent = '在线';
+                    modelInfo.textContent = data.devices?.[0]?.name || '未知';
+                    try {
+                        const queueRes = await fetch(`${url}/queue`);
+                        if (queueRes.ok) {
+                            const queueData = await queueRes.json();
+                            queueInfo.textContent = queueData.queue_running?.length || 0;
+                        }
+                    } catch (e) {}
+                    showToast('✅ ComfyUI 连接成功', 'success');
+                    return true;
+                } else {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+            } catch (error) {
+                statusDot.className = 'dot offline';
+                statusText.textContent = '🔴 未连接';
+                statusDetail.textContent = '连接失败';
+                modelInfo.textContent = '未知';
+                showToast('❌ ComfyUI 连接失败：' + error.message, 'error');
+                return false;
+            }
+        }
+
+        // ============================================================
+        //  7. 快速测试生图
+        // ============================================================
+        async function quickTest() {
+            const url = comfyUrl.value.trim();
+            if (!url) return showToast('⚠️ 请先配置 ComfyUI URL');
+
+            const testPrompt = 'a beautiful landscape, mountains, sunset, digital art, high quality';
+            showToast('🎨 正在测试生图...', 'info');
+
+            try {
+                // 简单测试：使用默认工作流或创建一个简单的工作流
+                const workflow = {
+                    "3": {
+                        "class_type": "KSampler",
+                        "inputs": {
+                            "seed": Math.floor(Math.random() * 1000000000),
+                            "steps": 10,
+                            "cfg": 7,
+                            "sampler_name": "euler",
+                            "scheduler": "normal",
+                            "denoise": 1,
+                            "model": ["4", 0],
+                            "positive": ["6", 0],
+                            "negative": ["7", 0],
+                            "latent_image": ["5", 0]
+                        }
+                    },
+                    "4": {
+                        "class_type": "CheckpointLoaderSimple",
+                        "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" }
+                    },
+                    "5": {
+                        "class_type": "EmptyLatentImage",
+                        "inputs": { "width": 512, "height": 512, "batch_size": 1 }
+                    },
+                    "6": {
+                        "class_type": "CLIPTextEncode",
+                        "inputs": { "text": testPrompt, "clip": ["4", 1] }
+                    },
+                    "7": {
+                        "class_type": "CLIPTextEncode",
+                        "inputs": { "text": "worst quality, blurry", "clip": ["4", 1] }
+                    },
+                    "8": {
+                        "class_type": "VAEDecode",
+                        "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+                    },
+                    "9": {
+                        "class_type": "SaveImage",
+                        "inputs": { "filename_prefix": "test", "images": ["8", 0] }
+                    }
+                };
+
+                const submitRes = await fetch(`${url}/prompt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: workflow })
+                });
+
+                if (!submitRes.ok) throw new Error(`提交失败: ${submitRes.status}`);
+                const submitData = await submitRes.json();
+                const promptId = submitData.prompt_id;
+
+                showToast(`⏳ 任务已提交 (${promptId})，等待生成...`, 'info');
+
+                // 轮询结果
+                let imageData = null;
+                for (let i = 0; i < 30; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const historyRes = await fetch(`${url}/history/${promptId}`);
+                    if (historyRes.ok) {
+                        const history = await historyRes.json();
+                        if (history[promptId] && history[promptId].outputs) {
+                            const outputs = history[promptId].outputs;
+                            for (const nodeId in outputs) {
+                                const nodeOut = outputs[nodeId];
+                                if (nodeOut.images && nodeOut.images.length > 0) {
+                                    imageData = nodeOut.images[0];
+                                    break;
+                                }
+                            }
+                            if (imageData) break;
+                        }
+                    }
+                }
+
+                if (imageData) {
+                    const imageUrl = `${url}/view?filename=${encodeURIComponent(imageData.filename)}&type=${imageData.type || 'output'}&subfolder=${encodeURIComponent(imageData.subfolder || '')}`;
+                    showToast('✅ 测试生图成功！', 'success');
+                    window.open(imageUrl, '_blank');
+                } else {
+                    throw new Error('生成超时');
+                }
+
+            } catch (error) {
+                showToast('❌ 测试失败：' + error.message, 'error');
+                console.error(error);
+            }
+        }
+
+        // ============================================================
+        //  8. 事件绑定
+        // ============================================================
+
+        // 连接检测
+        document.getElementById('checkStatusBtn').addEventListener('click', checkComfyStatus);
+
+        // 工作流操作
+        document.getElementById('addWorkflowBtn').addEventListener('click', addWorkflow);
+        document.getElementById('deleteWorkflowBtn').addEventListener('click', deleteWorkflow);
+        document.getElementById('copyWorkflowBtn').addEventListener('click', copyWorkflow);
+        document.getElementById('saveWorkflowBtn').addEventListener('click', saveWorkflow);
+
+        // 测试连接
+        document.getElementById('testWorkflowBtn').addEventListener('click', checkComfyStatus);
+
+        // 快速测试生图
+        document.getElementById('quickTestBtn').addEventListener('click', quickTest);
+
+        // 重置配置
+        document.getElementById('resetConfigBtn').addEventListener('click', resetConfig);
+
+        // 导出配置
+        document.getElementById('exportConfigBtn').addEventListener('click', exportConfig);
+
+        // 导入配置
+        document.getElementById('importConfigBtn').addEventListener('click', importConfig);
+        document.getElementById('configFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.comfyUrl) comfyUrl.value = data.comfyUrl;
+                    if (data.timeout) timeout.value = data.timeout;
+                    if (data.rpmLimit) rpmLimit.value = data.rpmLimit;
+                    if (data.workflows) {
+                        workflows = data.workflows;
+                        currentWorkflowIndex = workflows.length > 0 ? 0 : -1;
+                        if (currentWorkflowIndex >= 0) loadWorkflowToForm(currentWorkflowIndex);
+                        renderWorkflows();
+                    }
+                    saveConfig('✅ 配置已导入');
+                    showToast('✅ 配置已导入', 'success');
+                } catch (err) {
+                    showToast('❌ 导入失败：' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            this.value = '';
+        });
+
+        // 导入工作流 JSON
+        document.getElementById('importWorkflowBtn').addEventListener('click', () => {
+            document.getElementById('workflowFileInput').click();
+        });
+        document.getElementById('workflowFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    const json = ev.target.result;
+                    JSON.parse(json);
+                    workflowJson.value = json;
+                    importStatus.textContent = '✅ 已导入: ' + file.name;
+                    showToast('✅ 工作流 JSON 已导入', 'success');
+                    // ✅ 自动保存
+                    saveConfig('📥 已导入 JSON');
+                } catch (err) {
+                    showToast('❌ JSON 格式错误：' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            this.value = '';
+        });
+
+        // 折叠面板
+        jsonToggle.addEventListener('click', () => {
+            const arrow = jsonToggle.querySelector('.arrow');
+            jsonContent.classList.toggle('open');
+            arrow.classList.toggle('open');
+        });
+
+        // ✅ 自动保存（输入时延迟保存，带状态反馈）
+        let saveTimer;
+        const autoSaveInputs = [comfyUrl, timeout, rpmLimit, wfName, wfUrl, workflowJson, positiveNode, negativeNode, seedNode, pollInterval, permanentPositive, promptPosition, defaultNegative];
+        autoSaveInputs.forEach(el => {
+            el.addEventListener('input', () => {
+                clearTimeout(saveTimer);
+                // 显示"保存中..."
+                showSavingStatus();
+                saveTimer = setTimeout(() => {
+                    saveConfig();
+                }, 600);
+            });
+            // 失焦时立即保存
+            el.addEventListener('change', () => {
+                clearTimeout(saveTimer);
+                saveConfig();
+            });
+        });
+
+        // ============================================================
+        //  9. 初始化
+        // ============================================================
+
+        loadConfig();
+        // 如果没有工作流，创建一个默认的
+        if (workflows.length === 0) {
+            const defaultWf = {
+                name: '默认工作流',
+                url: '',
+                workflowJson: '',
+                positiveNode: '6',
+                negativeNode: '7',
+                seedNode: '',
+                pollInterval: 1200,
+                permanentPositive: '杰作，顶级画质，超高分辨率，极致细节，二次元插画，厚涂笔触，半写实二次元，体积光，轮廓光，色彩层次丰富，柔和画笔质感，发丝高光精细，服装花纹细节拉满，精致脸庞，锐利眼神，戏剧光影，暗幻想背景，景深效果，漂浮光粒，浮尘，概念原画，角色立绘，artstation 热门作品，高对比，层次阴影',
+                promptPosition: 'prefix',
+                defaultNegative: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry',
+                isDefault: true,
+                isPortrait: false,
+                isBody: false,
+                isDual: false
+            };
+            workflows.push(defaultWf);
+            currentWorkflowIndex = 0;
+            loadWorkflowToForm(0);
+            renderWorkflows();
+            saveConfig('✅ 已创建默认工作流');
+        }
+
+        // 自动检测连接状态
+        setTimeout(checkComfyStatus, 1000);
+
+        console.log('🎨 ComfyUI 配置面板已加载（自动保存已启用）');
+        console.log(`📋 工作流数量: ${workflows.length}`);
+        console.log('💡 所有修改将自动保存到浏览器本地');
+    </script>
+</body>
+</html>

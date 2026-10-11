@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 AI 自动配图工具</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* 头部 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a4a;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .header h1 {
+            color: #ffd866;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header .engine-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header .engine-selector select {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        .header .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+        }
+        .header .status-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot-green { background: #4ade80; }
+        .dot-red { background: #f87171; }
+        .dot-yellow { background: #fbbf24; }
+
+        /* 卡片 */
+        .card {
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #8888aa;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 输入区 */
+        .input-area textarea {
+            width: 100%;
+            min-height: 180px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            background: #0a0a14;
+            color: #e0e0e0;
+            font-size: 14px;
+            line-height: 1.8;
+            resize: vertical;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .input-area textarea:focus {
+            outline: none;
+            border-color: #ffd866;
+        }
+        .input-area .upload-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .input-area .upload-row .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn-secondary {
+            background: #2a2a4a;
+            color: #c0c0d0;
+        }
+        .btn-secondary:hover {
+            background: #3a3a5a;
+        }
+        .btn-primary {
+            background: #ffd866;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+        .btn-primary:hover {
+            background: #ffe080;
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-success {
+            background: #4ade80;
+            color: #1a1a2e;
+        }
+        .btn-success:hover {
+            background: #5be890;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        /* 进度 */
+        .progress-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            min-height: 40px;
+        }
+        .progress-area .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #2a2a4a;
+            border-top-color: #ffd866;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+        .progress-area .spinner.active {
+            display: inline-block;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .progress-area .status-text {
+            color: #8888aa;
+            font-size: 14px;
+            flex: 1;
+        }
+        .progress-area .status-text .highlight {
+            color: #ffd866;
+        }
+
+        /* 结果 */
+        .result-area {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .result-item {
+            background: #0a0a14;
+            border-radius: 8px;
+            padding: 12px 16px;
+            border: 1px solid #1a1a3a;
+            transition: border-color 0.2s;
+        }
+        .result-item:hover {
+            border-color: #2a2a4a;
+        }
+        .result-item .scene-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .result-item .scene-header .label {
+            font-weight: 600;
+            color: #ffd866;
+            font-size: 14px;
+        }
+        .result-item .scene-header .badge {
+            font-size: 11px;
+            padding: 2px 10px;
+            border-radius: 10px;
+            background: #2a2a4a;
+            color: #888;
+        }
+        .result-item .scene-header .badge.success {
+            background: #4ade8020;
+            color: #4ade80;
+        }
+        .result-item .scene-header .badge.error {
+            background: #f8717120;
+            color: #f87171;
+        }
+        .result-item .scene-desc {
+            font-size: 13px;
+            color: #a0a0b0;
+            margin-bottom: 6px;
+            line-height: 1.5;
+        }
+        .result-item .scene-prompt {
+            font-size: 12px;
+            color: #666;
+            background: #0f0f1a;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+        .result-item .scene-image img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+        }
+        .result-item .scene-image .placeholder {
+            color: #555;
+            font-size: 13px;
+            padding: 20px;
+            text-align: center;
+            background: #0f0f1a;
+            border-radius: 6px;
+            border: 1px dashed #2a2a4a;
+        }
+        .result-item .scene-actions {
+            display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+        }
+        .result-item .scene-actions .btn {
+            padding: 4px 12px; font-size: 12px; border: none; border-radius: 5px;
+            cursor: pointer; background: #2a2a4a; color: #c0c0d0; transition: all .2s;
+        }
+        .result-item .scene-actions .btn:hover { background: #3a3a5a; }
+        .result-item .scene-actions .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* 插图库 */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        .gallery-item {
+            background: #0a0a14; border: 1px solid #1a1a3a; border-radius: 8px; overflow: hidden;
+        }
+        .gallery-item img { width: 100%; display: block; max-height: 240px; object-fit: cover; }
+        .gallery-item .g-info { padding: 8px 10px; font-size: 12px; color: #888; }
+        .gallery-item .g-info .g-scene { color: #ffd866; margin-bottom: 4px; }
+        .gallery-item .g-actions { display: flex; gap: 6px; padding: 0 10px 10px; }
+        .gallery-item .g-actions .btn {
+            padding: 3px 10px; font-size: 11px; border: none; border-radius: 4px;
+            cursor: pointer; background: #2a2a4a; color: #c0c0d0;
+        }
+
+        /* 提示词模板 */
+        .tpl-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+        .tpl-presets button {
+            padding: 4px 12px; font-size: 12px; cursor: pointer;
+            background: #2a2a4a; color: #c0c0d0; border: 1px solid #2a2a4a; border-radius: 12px;
+            transition: all .2s;
+        }
+        .tpl-presets button:hover { background: #3a3a5a; color: #ffd866; }
+        .tpl-field { margin-bottom: 10px; }
+        .tpl-field label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
+        .tpl-field textarea {
+            width: 100%; min-height: 64px; padding: 8px 10px; border-radius: 6px;
+            border: 1px solid #2a2a4a; background: #0a0a14; color: #e0e0e0;
+            font-size: 12px; font-family: 'Courier New', monospace; line-height: 1.6;
+            resize: vertical;
+        }
+        .tpl-field textarea:focus { outline: none; border-color: #ffd866; }
+        .tpl-hint { font-size: 11px; color: #666; margin-top: 4px; }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a3a;
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            font-size: 14px;
+            z-index: 999;
+            animation: fadeInUp 0.3s ease;
+            max-width: 90%;
+        }
+        .toast.success { border-color: #4ade80; }
+        .toast.error { border-color: #f87171; }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #555;
+        }
+        .empty-state .icon {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 12px;
+        }
+        .empty-state .sub {
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            .header { flex-direction: column; align-items: stretch; }
+            .header .engine-selector { justify-content: space-between; }
+            .input-area textarea { min-height: 120px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>🎨 AI 自动配图工具</h1>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div class="engine-selector">
+                    <span style="font-size:13px;color:#888;">生图引擎:</span>
+                    <select id="engineSelect">
+                        <option value="comfyui">🖥️ ComfyUI</option>
+                        <option value="novelai">🎨 NovelAI</option>
+                        <option value="grok">🍌 Grok/Banana</option>
+                    </select>
+                </div>
+                <div class="status-badge" id="configStatus">
+                    <span class="dot" id="statusDot"></span>
+                    <span id="statusText">检测中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="card input-area">
+            <div class="card-title">📝 章节内容</div>
+            <textarea id="chapterContent" placeholder="在此粘贴小说章节内容，或点击下方按钮导入 TXT 文件...">第一章 开端
+        这是小说的第一段内容。故事从这里开始……
+        主角走在一条漫长的道路上，前方是未知的命运。
+
+        第二章 相遇
+        在旅途中，主角遇到了一个神秘的人物。
+        这个人穿着黑色的斗篷，看不清面容。
+        "你是谁？"主角问道。
+        对方没有回答，只是默默转身离去。
+
+        第三章 真相
+        随着故事的推进，真相逐渐浮出水面。
+        原来这一切都是一场精心设计的考验。
+        主角必须做出选择，而这将改变一切。</textarea>
+            <div class="upload-row">
+                <button class="btn btn-secondary" id="uploadBtn">📂 导入 TXT</button>
+                <input type="file" id="fileInput" accept=".txt" style="display:none;">
+                <button class="btn btn-secondary" id="clearBtn">🗑️ 清空</button>
+                <span style="font-size:12px;color:#555;margin-left:auto;" id="charCount">0 字符</span>
+            </div>
+        </div>
+
+        <!-- AI 绘图提示词规则 -->
+        <div class="card">
+            <div class="card-title">🎛️ AI 绘图提示词规则（让 AI 直接生成高质量出图词）</div>
+            <div class="tpl-presets" id="tplPresets">
+                <button data-preset="generic">✨ 通用高质量</button>
+                <button data-preset="xianxia">🏯 玄幻国风</button>
+                <button data-preset="cinematic">🎬 写实电影感</button>
+                <button data-preset="anime">🌸 日系动漫</button>
+                <button data-preset="watercolor">🎨 水彩手绘</button>
+                <button id="tplResetBtn" style="margin-left:auto;">↩️ 重置默认</button>
+            </div>
+            <div class="tpl-field">
+                <label>规则内容（会注入给 AI，告诉它怎么写英文绘图 prompt）</label>
+                <textarea id="tplAnalyzer" style="min-height:120px;"></textarea>
+                <div class="tpl-hint">💡 这段规则拼接到 AI 分析指令后面，让它输出的 prompt 自带质量词 / 风格 / 镜头光影；留空则用默认规则。</div>
+            </div>
+            <div class="tpl-field">
+                <label>固定正面提示词（前置，拼在每条 prompt 最前面）</label>
+                <textarea id="fixedPositivePrefix" style="min-height:60px;" placeholder="如: masterpiece, best quality, very detailed,"></textarea>
+                <div class="tpl-hint">💡 所有生图引擎（ComfyUI/NovelAI/Grok）都会自动加上这段，不用每条手写。</div>
+            </div>
+            <div class="tpl-field">
+                <label>后置固定正面提示词（拼在每条 prompt 最后面）</label>
+                <textarea id="fixedPositiveSuffix" style="min-height:60px;" placeholder="如: anime style, soft lighting, depth of field,"></textarea>
+            </div>
+        </div>
+
+        <!-- Grok/Banana 配置 -->
+        <div class="card" id="grokConfigCard" style="display:none;">
+            <div class="card-title">🍌 Grok / Banana 接口配置</div>
+            <div class="tpl-field">
+                <label>API 连接地址</label>
+                <input type="text" id="grokUrl" placeholder="https://api.x.ai/v1/images/generations" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+            </div>
+            <div class="tpl-field">
+                <label>API Key</label>
+                <input type="password" id="grokKey" placeholder="sk-..." style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <div class="tpl-field" style="flex:1;min-width:160px;">
+                    <label>图像模型 <button type="button" id="grokFetchModelsBtn" title="从接口拉取模型列表" style="padding:1px 8px;font-size:11px;cursor:pointer;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:10px;margin-left:4px;">🔄 拉取</button></label>
+                    <input type="text" id="grokModel" list="grokModelList" placeholder="grok-2-image-1212" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+                    <datalist id="grokModelList"></datalist>
+                </div>
+                <div class="tpl-field" style="flex:1;min-width:120px;">
+                    <label>长宽比</label>
+                    <select id="grokRatio" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+                        <option value="1024x1024">1:1 (1024×1024)</option>
+                        <option value="832x1216">2:3 竖图 (832×1216)</option>
+                        <option value="1216x832">3:2 横图 (1216×832)</option>
+                        <option value="1024x1792">9:16 手机 (1024×1792)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="tpl-hint">💡 配置自动保存在浏览器；如果用本地中转（如 http://localhost:8008），把地址填到上面即可。</div>
+            <div class="tpl-field">
+                <label>测试提示词（自己输入要测试的 prompt）</label>
+                <textarea id="grokTestPrompt" rows="2" placeholder="a cute cat sitting on a windowsill, sunny day, anime style" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+            </div>
+            <div style="margin-top:10px;">
+                <button id="grokTestBtn" style="padding:6px 16px;background:#4ade80;color:#1a1a2e;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;">🧪 测试生图</button>
+                <span id="grokTestResult" style="margin-left:10px;font-size:12px;color:#888;"></span>
+            </div>
+        </div>
+
+        <!-- 操作 -->
+        <div class="card">
+            <div class="progress-area">
+                <span class="spinner" id="spinner"></span>
+                <span class="status-text" id="statusText2">💡 输入章节内容后点击「生成配图」</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="btn btn-primary" id="generateBtn">🚀 生成配图</button>
+                <button class="btn btn-secondary" id="clearResultBtn">🧹 清除结果</button>
+            </div>
+        </div>
+
+        <!-- 结果 -->
+        <div class="card">
+            <div class="card-title">
+                🖼️ 生成结果
+                <span style="font-size:12px;color:#555;font-weight:normal;" id="resultCount"></span>
+            </div>
+            <div class="result-area" id="resultArea">
+                <div class="empty-state">
+                    <span class="icon">🖼️</span>
+                    <div>等待生成配图...</div>
+                    <div class="sub">AI 将分析章节内容，找出适合配图的场景并生成图片</div>
+                </div>
+            </div>
+        </div>
+        <!-- 插图库 -->
+        <div class="card">
+            <div class="card-title" style="justify-content:space-between;">
+                <span>📚 插图库（历史生成）</span>
+                <button class="btn btn-secondary btn-sm" id="refreshGalleryBtn">🔄 刷新</button>
+            </div>
+            <div class="gallery-grid" id="galleryGrid">
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <span class="icon">📚</span>
+                    <div>暂无历史插图</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  0. 配置与 API 地址
+        // ============================================================
+
+        const API_BASE = window.location.origin;
+        console.log('📡 API 地址:', API_BASE);
+
+        // 从 localStorage 加载 API 配置
+        function loadApiConfig() {
+            try {
+                const raw = localStorage.getItem('api_config');
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // ✅ 从 localStorage 加载 ComfyUI 工作流配置
+        function loadComfyuiConfig() {
+            try {
+                const raw = localStorage.getItem('comfyui_config');
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                const workflows = data.workflows || [];
+                const selected = workflows.find(w => w.isDefault) || workflows[0] || null;
+                return {
+                    comfyUrl: data.comfyUrl || 'http://127.0.0.1:8188',
+                    workflowConfig: selected ? {
+                        workflowJson: selected.workflowJson || '',
+                        positiveNode: selected.positiveNode || '6',
+                        negativeNode: selected.negativeNode || '7',
+                        seedNode: selected.seedNode || '',
+                        modelName: selected.modelName || '',
+                        // ✅ 新增：读取永久提示词和位置
+                        permanentPositive: selected.permanentPositive || '',
+                        promptPosition: selected.promptPosition || 'prefix'
+                    } : null
+                };
+            } catch (e) {
+            console.warn('加载 ComfyUI 配置失败:', e);
+            return null;
+            }
+        }
+        // ============================================================
+        //  1. DOM 引用
+        // ============================================================
+
+        const chapterContent = document.getElementById('chapterContent');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const generateBtn = document.getElementById('generateBtn');
+        const clearResultBtn = document.getElementById('clearResultBtn');
+        const resultArea = document.getElementById('resultArea');
+        const resultCount = document.getElementById('resultCount');
+        const spinner = document.getElementById('spinner');
+        const statusText2 = document.getElementById('statusText2');
+        const engineSelect = document.getElementById('engineSelect');
+        const charCount = document.getElementById('charCount');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // ============================================================
+        //  2. 工具函数
+        // ============================================================
+
+        function showToast(msg, type = 'info') {
+            const old = document.querySelector('.toast');
+            if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getEngineLabel(engine) {
+            return engine === 'novelai' ? 'NovelAI' : engine === 'grok' ? 'Grok' : 'ComfyUI';
+        }
+
+        function updateCharCount() {
+            charCount.textContent = `${chapterContent.value.length} 字符`;
+        }
+
+        function setStatus(text, type = 'info') {
+            statusText2.innerHTML = text;
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                spinner.classList.add('active');
+                generateBtn.disabled = true;
+                generateBtn.textContent = '⏳ 生成中...';
+            } else {
+                spinner.classList.remove('active');
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🚀 生成配图';
+            }
+        }
+
+        // ============================================================
+        //  3. 读取 API 配置状态
+        // ============================================================
+
+        function updateConfigStatus() {
+            const config = loadApiConfig();
+            const engine = engineSelect.value;
+
+            if (!config) {
+                statusDot.className = 'dot dot-red';
+                statusText.textContent = '⚠️ 未配置 API';
+                return;
+            }
+
+            const hasLlm = config.llm?.apiKey;
+            const hasEngine = engine === 'novelai' ? config.novelai?.apiKey : true;
+
+            if (!hasLlm) {
+                statusDot.className = 'dot dot-red';
+                statusText.textContent = '⚠️ 请配置 LLM API';
+                return;
+            }
+
+            if (engine === 'novelai' && !hasEngine) {
+                statusDot.className = 'dot dot-red';
+                statusText.textContent = '⚠️ 请配置 NovelAI API';
+                return;
+            }
+
+            if (engine === 'grok' && !grokKey.value.trim()) {
+                statusDot.className = 'dot dot-red';
+                statusText.textContent = '⚠️ 请配置 Grok API Key';
+                return;
+            }
+
+            if (engine === 'comfyui' && !config.comfyui?.url) {
+                statusDot.className = 'dot dot-red';
+                statusText.textContent = '⚠️ 请配置 ComfyUI URL';
+                return;
+            }
+
+            statusDot.className = 'dot dot-green';
+            statusText.textContent = `✅ 已就绪 (${getEngineLabel(engine)})`;
+        }
+
+        // ============================================================
+        //  4. 文件导入
+        // ============================================================
+
+        uploadBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                chapterContent.value = text;
+                updateCharCount();
+                showToast(`✅ 已导入: ${file.name}`, 'success');
+            } catch (err) {
+                showToast('❌ 读取失败: ' + err.message, 'error');
+            }
+            fileInput.value = '';
+        });
+
+        clearBtn.addEventListener('click', () => {
+            chapterContent.value = '';
+            updateCharCount();
+            showToast('🗑️ 已清空');
+        });
+
+        chapterContent.addEventListener('input', updateCharCount);
+
+        // ============================================================
+        //  5. 清除结果
+        // ============================================================
+
+        clearResultBtn.addEventListener('click', () => {
+            resultArea.innerHTML = `
+                <div class="empty-state">
+                    <span class="icon">🖼️</span>
+                    <div>等待生成配图...</div>
+                    <div class="sub">AI 将分析章节内容，找出适合配图的场景并生成图片</div>
+                </div>
+            `;
+            resultCount.textContent = '';
+            showToast('🧹 已清除结果');
+        });
+
+        // ============================================================
+        //  6. 核心生成功能（✅ 支持 ComfyUI 工作流配置）
+        // ============================================================
+
+        generateBtn.addEventListener('click', async () => {
+            const content = chapterContent.value.trim();
+            if (!content) {
+                showToast('⚠️ 请先输入章节内容', 'error');
+                return;
+            }
+
+            // 检查配置
+            const config = loadApiConfig();
+            if (!config?.llm?.apiKey) {
+                showToast('⚠️ 请先在 API 配置中心配置 LLM API Key', 'error');
+                return;
+            }
+
+            const engine = engineSelect.value;
+            if (engine === 'novelai' && !config.novelai?.apiKey) {
+                showToast('⚠️ 请先在 API 配置中心配置 NovelAI API Key', 'error');
+                return;
+            }
+
+            const modelName = config.llm?.model || 'gpt-4';
+
+            // ✅ 读取 ComfyUI 工作流配置
+            let workflowConfig = null;
+            if (engine === 'comfyui') {
+                const comfyui = loadComfyuiConfig();
+                if (comfyui && comfyui.workflowConfig) {
+                    workflowConfig = comfyui.workflowConfig;
+                    console.log('✅ 已加载 ComfyUI 工作流配置:', {
+                        hasJson: !!workflowConfig.workflowJson,
+                        positiveNode: workflowConfig.positiveNode,
+                        negativeNode: workflowConfig.negativeNode
+                    });
+                } else {
+                    console.log('ℹ️ 未找到 ComfyUI 工作流配置，使用默认工作流');
+                }
+            }
+
+            setLoading(true);
+            setStatus(`🧠 使用 ${getEngineLabel(engine)} 引擎，模型: ${modelName}`, 'info');
+
+            try {
+                const requestBody = {
+                    title: '章节',
+                    content: content,
+                    engine: engine,
+                    model: modelName,
+                    width: config.novelai?.width || 832,
+                    height: config.novelai?.height || 1216,
+                    ...getAnalyzerRule()
+                };
+                if (engine === 'grok') Object.assign(requestBody, getGrokConfig());
+
+                // ✅ 如果是 ComfyUI，传递 workflowConfig
+                if (engine === 'comfyui' && workflowConfig) {
+                    requestBody.workflowConfig = workflowConfig;
+                }
+
+                // 记录本次运行配置，供单图重画使用
+                lastRunConfig = {
+                    engine, workflowConfig, model: modelName,
+                    width: requestBody.width, height: requestBody.height
+                };
+
+                const response = await fetch(`${API_BASE}/api/analyze-and-generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || '处理失败');
+                }
+
+                if (!data.scenes || data.scenes.length === 0) {
+                    setStatus('ℹ️ 未找到适合配图的场景', 'info');
+                    resultArea.innerHTML = `
+                        <div class="empty-state">
+                            <span class="icon">🔍</span>
+                            <div>未找到适合配图的场景</div>
+                            <div class="sub">AI 分析后认为本章节没有适合配图的内容</div>
+                        </div>
+                    `;
+                    resultCount.textContent = '';
+                    return;
+                }
+
+                // 渲染结果
+                let html = '';
+                let imageCount = 0;
+                let textCount = 0;
+
+                for (let i = 0; i < data.scenes.length; i++) {
+                    const scene = data.scenes[i];
+                    const label = scene.scene || `场景 ${i+1}`;
+
+                    // 获取图片 URL
+                    let imageUrl = null;
+                    if (scene.image?.url) imageUrl = scene.image.url;
+                    else if (scene.image) imageUrl = scene.image;
+                    else if (scene.images && scene.images.length > 0) imageUrl = scene.images[0];
+
+                    const hasImage = !!imageUrl;
+                    if (hasImage) imageCount++;
+                    else textCount++;
+
+                    const badgeClass = scene.error ? 'error' : (hasImage ? 'success' : '');
+                    const badgeText = scene.error ? '❌ 生成失败' : (hasImage ? '✅ 已生成图片' : '📝 仅文本');
+
+                    html += `
+                        <div class="result-item" data-scene='${encodeURIComponent(JSON.stringify(scene))}'>
+                            <div class="scene-header">
+                                <span class="label">${i+1}. ${escapeHtml(label)}</span>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div class="scene-desc">${escapeHtml(label)}</div>
+                            ${scene.prompt ? `<div class="scene-prompt">📌 提示词: ${escapeHtml(scene.prompt)}</div>` : ''}
+                            ${scene.anchor ? `<div style="font-size:12px;color:#555;margin-bottom:4px;">📍 位置: ${escapeHtml(scene.anchor)}</div>` : ''}
+                            <div class="scene-image">
+                                ${hasImage ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(label)}" loading="lazy">` :
+                                `<div class="placeholder">${scene.error ? '❌ ' + escapeHtml(scene.error) : '📝 无图片（可能图片生成失败）'}</div>`}
+                            </div>
+                            <div class="scene-actions">
+                                ${hasImage ? `<button class="btn" onclick="regenerateOne(this)">🔄 换 seed 重画</button>` : `<button class="btn" onclick="regenerateOne(this)">🔄 重新生成</button>`}
+                                <button class="btn" onclick="copyPrompt(this)">📋 复制提示词</button>
+                                ${hasImage ? `<button class="btn" onclick="downloadImage(this)">⬇️ 下载</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                resultArea.innerHTML = html;
+                resultCount.textContent = `共 ${data.scenes.length} 个场景，图片 ${imageCount} 张，文本 ${textCount} 个`;
+
+                if (imageCount > 0 && textCount === 0) {
+                    setStatus(`✅ 成功生成 ${imageCount} 张配图`, 'success');
+                    showToast(`✅ 生成 ${imageCount} 张配图`, 'success');
+                } else if (imageCount > 0 && textCount > 0) {
+                    setStatus(`⚠️ 生成 ${imageCount} 张图片，${textCount} 个场景仅文本`, 'info');
+                    showToast(`⚠️ ${imageCount} 张图片，${textCount} 个文本`, 'info');
+                } else {
+                    setStatus(`ℹ️ 已插入 ${textCount} 个场景的文本描述（图片生成失败）`, 'info');
+                    showToast(`ℹ️ 所有场景图片生成失败，已显示文本`, 'info');
+                }
+
+            } catch (error) {
+                console.error('生成失败:', error);
+                setStatus(`❌ ${error.message}`, 'error');
+                showToast(`❌ ${error.message}`, 'error');
+                resultArea.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">❌</span>
+                        <div>生成失败</div>
+                        <div class="sub">${escapeHtml(error.message)}</div>
+                    </div>
+                `;
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // ============================================================
+        //  6.5 单图操作：重画 / 复制 / 下载 / 插图库
+        // ============================================================
+        let lastRunConfig = { engine: 'comfyui', workflowConfig: null, model: 'gpt-4' };
+
+        // ============================================================
+        //  6.4 AI 绘图提示词规则（注入给 LLM，让它写更高质量的 prompt）
+        // ============================================================
+        const BASE_RULE = `生成英文绘图提示词（prompt 字段）时必须遵守：
+1. 结构：主体描述 + 动作姿态 + 环境背景 + 光影氛围 + 镜头构图
+2. 末尾必须追加质量词：masterpiece, best quality, highly detailed, 8k resolution, cinematic lighting, sharp focus, depth of field
+3. prompt 字段只写英文，不要中文解释`;
+
+        const PRESETS = {
+            generic: BASE_RULE,
+            xianxia: BASE_RULE + '\n4. 风格偏向：Chinese xianxia fantasy, ethereal immortal atmosphere, flowing robes, ink wash accent, misty mountains, dramatic sky',
+            cinematic: BASE_RULE + '\n4. 风格偏向：photorealistic movie still, volumetric lighting, dramatic composition, film grain, shallow depth of field',
+            anime: BASE_RULE + '\n4. 风格偏向：anime key visual, vibrant colors, detailed background, Kyoto animation style, cinematic lighting',
+            watercolor: BASE_RULE + '\n4. 风格偏向：watercolor illustration, soft brush strokes, pastel colors, hand drawn on paper, dreamy atmosphere'
+        };
+
+        const tplAnalyzer = document.getElementById('tplAnalyzer');
+
+        function loadAnalyzerRule() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('analyzer_rule') || 'null');
+                if (saved && saved.rule) { tplAnalyzer.value = saved.rule; return; }
+            } catch (e) {}
+            tplAnalyzer.value = BASE_RULE;
+        }
+        function saveAnalyzerRule() {
+            localStorage.setItem('analyzer_rule', JSON.stringify({ rule: tplAnalyzer.value }));
+        }
+        tplAnalyzer.addEventListener('input', saveAnalyzerRule);
+        document.querySelectorAll('#tplPresets button[data-preset]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = PRESETS[btn.dataset.preset];
+                if (!p) return;
+                tplAnalyzer.value = p;
+                saveAnalyzerRule();
+                showToast('✅ 已应用规则: ' + btn.textContent.trim(), 'success');
+            });
+        });
+        document.getElementById('tplResetBtn').addEventListener('click', () => {
+            tplAnalyzer.value = BASE_RULE;
+            saveAnalyzerRule();
+            showToast('↩️ 已重置为默认规则');
+        });
+
+        // 固定前置/后置正面提示词
+        const fixedPrefixEl = document.getElementById('fixedPositivePrefix');
+        const fixedSuffixEl = document.getElementById('fixedPositiveSuffix');
+        function loadFixedPrompts() {
+            try {
+                const s = JSON.parse(localStorage.getItem('fixed_prompts') || '{}');
+                fixedPrefixEl.value = s.prefix || '';
+                fixedSuffixEl.value = s.suffix || '';
+            } catch (e) {}
+        }
+        function saveFixedPrompts() {
+            localStorage.setItem('fixed_prompts', JSON.stringify({
+                prefix: fixedPrefixEl.value.trim(),
+                suffix: fixedSuffixEl.value.trim()
+            }));
+        }
+        fixedPrefixEl.addEventListener('input', saveFixedPrompts);
+        fixedSuffixEl.addEventListener('input', saveFixedPrompts);
+        loadFixedPrompts();
+        loadAnalyzerRule();
+
+        function getAnalyzerRule() {
+            return { analyzeTemplate: tplAnalyzer.value.trim() };
+        }
+
+        // ============================================================
+        //  6.6 Grok / Banana 配置
+        // ============================================================
+        const grokCard = document.getElementById('grokConfigCard');
+        const grokUrl = document.getElementById('grokUrl');
+        const grokKey = document.getElementById('grokKey');
+        const grokModel = document.getElementById('grokModel');
+        const grokRatio = document.getElementById('grokRatio');
+
+        function loadGrokConfig() {
+            try {
+                const s = JSON.parse(localStorage.getItem('grok_config') || 'null');
+                if (s) {
+                    grokUrl.value = s.apiUrl || '';
+                    grokKey.value = s.apiKey || '';
+                    grokModel.value = s.model || '';
+                    grokRatio.value = s.ratio || '1024x1024';
+                }
+            } catch (e) {}
+        }
+        function saveGrokConfig() {
+            localStorage.setItem('grok_config', JSON.stringify({
+                apiUrl: grokUrl.value.trim(), apiKey: grokKey.value.trim(),
+                model: grokModel.value.trim(), ratio: grokRatio.value
+            }));
+        }
+        [grokUrl, grokKey, grokModel].forEach(el => {
+            el.addEventListener('input', saveGrokConfig);
+            el.addEventListener('change', saveGrokConfig);
+        });
+        grokRatio.addEventListener('change', saveGrokConfig);
+        loadGrokConfig();
+
+        function getGrokConfig() {
+            const [w, h] = (grokRatio.value || '1024x1024').split('x').map(Number);
+            return {
+                apiUrl: grokUrl.value.trim(),
+                apiKey: grokKey.value.trim(),
+                model: grokModel.value.trim(),
+                width: w, height: h
+            };
+        }
+
+        function syncGrokVisibility() {
+            grokCard.style.display = engineSelect.value === 'grok' ? '' : 'none';
+        }
+        engineSelect.addEventListener('change', syncGrokVisibility);
+        syncGrokVisibility();
+
+        // Grok 测试生图
+        document.getElementById('grokTestBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('grokTestBtn');
+            const result = document.getElementById('grokTestResult');
+            const prompt = document.getElementById('grokTestPrompt').value.trim() || 'a cute cat sitting on a windowsill, sunny day, anime style';
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = '⏳ 生成中...';
+            result.textContent = '';
+            try {
+                const r = await fetch(`${API_BASE}/api/grok-generate`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt, ...getGrokConfig(),
+                        promptPrefix: fixedPrefixEl.value.trim(),
+                        promptSuffix: fixedSuffixEl.value.trim()
+                    })
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.error || '生成失败');
+                const url = data.image?.url;
+                result.innerHTML = `✅ 成功 <img src="${url}" style="max-height:80px;border-radius:4px;vertical-align:middle;margin-left:6px;">`;
+            } catch (e) {
+                result.textContent = '❌ ' + e.message;
+                result.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }
+        });
+
+        // 从 API 地址拉取模型列表
+        document.getElementById('grokFetchModelsBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('grokFetchModelsBtn');
+            const base = (grokUrl.value.trim() || 'https://api.x.ai/v1').replace(/\/$/, '');
+            // 把 /images/generations、/chat/completions 替换成 /models
+            let modelsUrl = base.replace(/\/(images\/generations|chat\/completions)$/, '') + '/models';
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = '⏳';
+            try {
+                const r = await fetch(modelsUrl, {
+                    headers: grokKey.value.trim() ? { Authorization: `Bearer ${grokKey.value.trim()}` } : {}
+                });
+                const data = await r.json();
+                const list = Array.isArray(data?.data) ? data.data.map(m => m.id || m)
+                    : Array.isArray(data?.models) ? data.models : [];
+                if (!list.length) throw new Error('接口未返回模型列表');
+                // 优先过滤图像相关模型，其余也保留
+                document.getElementById('grokModelList').innerHTML =
+                    list.map(id => `<option value="${escapeHtml(id)}">`).join('');
+                // 默认选第一个图像相关的（如果当前是空或默认占位）
+                const img = list.find(id => /image|dall|gpt-image|flux|sd|nai|novel|grok/i.test(id));
+                if (img) { grokModel.value = img; saveGrokConfig(); }
+                showToast(`✅ 拉取到 ${list.length} 个模型，已选: ${img || list[0]}`, 'success');
+            } catch (e) {
+                showToast('❌ 拉取失败: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }
+        });
+
+        // 生成时记录配置（在 generateBtn 里也会更新）
+        function getCurrentRunConfig() {
+            const engine = engineSelect.value;
+            let workflowConfig = null;
+            if (engine === 'comfyui') {
+                const c = loadComfyuiConfig();
+                if (c && c.workflowConfig) workflowConfig = c.workflowConfig;
+            }
+            const config = loadApiConfig() || {};
+            return {
+                engine,
+                workflowConfig,
+                model: config.llm?.model || 'gpt-4',
+                width: config.novelai?.width || 832,
+                height: config.novelai?.height || 1216
+            };
+        }
+
+        async function regenerateOne(btn) {
+            const item = btn.closest('.result-item');
+            const scene = JSON.parse(decodeURIComponent(item.dataset.scene));
+            if (!scene.prompt) { showToast('⚠️ 该场景没有提示词', 'error'); return; }
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = '⏳ 生成中...';
+            try {
+                const endpoint = lastRunConfig.engine === 'novelai' ? 'novelai-generate'
+                    : lastRunConfig.engine === 'grok' ? 'grok-generate' : 'generate';
+                const body = lastRunConfig.engine === 'novelai'
+                    ? { prompt: scene.prompt, width: lastRunConfig.width, height: lastRunConfig.height }
+                    : lastRunConfig.engine === 'grok'
+                        ? { prompt: scene.prompt, ...getGrokConfig() }
+                        : { prompt: scene.prompt, workflowConfig: lastRunConfig.workflowConfig };
+                const r = await fetch(`${API_BASE}/api/${endpoint}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.error || '生成失败');
+                const url = data.image?.url || data.image || (data.images && data.images[0]);
+                if (!url) throw new Error('未返回图片');
+                const img = item.querySelector('img');
+                if (img) img.src = url + (url.includes('?') ? '&t=' : '?t=') + Date.now();
+                else {
+                    const ph = item.querySelector('.placeholder');
+                    if (ph) ph.outerHTML = `<img src="${url}" style="max-width:100%;max-height:400px;border-radius:6px;">`;
+                }
+                showToast('✅ 已重新生成', 'success');
+                loadGallery();
+            } catch (e) {
+                showToast('❌ ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }
+        }
+
+        function copyPrompt(btn) {
+            const item = btn.closest('.result-item');
+            const scene = JSON.parse(decodeURIComponent(item.dataset.scene));
+            navigator.clipboard.writeText(scene.prompt || '').then(
+                () => showToast('📋 提示词已复制', 'success'),
+                () => showToast('❌ 复制失败', 'error')
+            );
+        }
+
+        function downloadImage(btn) {
+            const item = btn.closest('.result-item');
+            const img = item.querySelector('img');
+            if (!img) return;
+            const a = document.createElement('a');
+            a.href = img.src;
+            a.download = `illustration_${Date.now()}.png`;
+            a.target = '_blank';
+            a.click();
+        }
+
+        // 插图库
+        async function loadGallery() {
+            try {
+                const r = await fetch(`${API_BASE}/api/illustrations`);
+                const data = await r.json();
+                const grid = document.getElementById('galleryGrid');
+                if (!data.success || !data.illustrations || !data.illustrations.length) {
+                    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="icon">📚</span><div>暂无历史插图</div></div>`;
+                    return;
+                }
+                grid.innerHTML = data.illustrations.slice(0, 60).map(ill => `
+                    <div class="gallery-item">
+                        <img src="${escapeHtml(ill.image || '')}" loading="lazy" onerror="this.style.opacity=.2">
+                        <div class="g-info">
+                            <div class="g-scene">${escapeHtml(ill.scene || '未命名')}</div>
+                            <div>${escapeHtml(ill.engine || '')}${ill.seed ? ' · seed ' + ill.seed : ''}</div>
+                        </div>
+                        <div class="g-actions">
+                            <button class="btn" onclick="window.open('${escapeHtml(ill.image || '#')}')">🔍 查看</button>
+                            <button class="btn" onclick="deleteIllustration('${ill.id}', this)">🗑️ 删除</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.warn('插图库加载失败:', e);
+            }
+        }
+
+        async function deleteIllustration(id, btn) {
+            if (!confirm('确定删除这条插图记录？')) return;
+            try {
+                await fetch(`${API_BASE}/api/illustrations/${id}`, { method: 'DELETE' });
+                btn.closest('.gallery-item').remove();
+                showToast('🗑️ 已删除', 'success');
+            } catch (e) {
+                showToast('❌ 删除失败: ' + e.message, 'error');
+            }
+        }
+
+        document.getElementById('refreshGalleryBtn').addEventListener('click', loadGallery);
+
+
+
+        engineSelect.addEventListener('change', () => {
+            updateConfigStatus();
+            const engine = engineSelect.value;
+            showToast(`🔀 切换到 ${getEngineLabel(engine)}`, 'info');
+        });
+
+        // ============================================================
+        //  8. 初始化
+        // ============================================================
+
+        updateCharCount();
+        updateConfigStatus();
+        loadGallery();
+
+        console.log('🎨 AI 自动配图工具已加载');
+        console.log('📡 API 地址:', API_BASE);
+
+        // 监听配置变化（其他标签页修改配置时）
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'api_config') {
+                updateConfigStatus();
+            }
+            if (e.key === 'comfyui_config') {
+                console.log('🔄 ComfyUI 配置已更新');
+            }
+        });
+    </script>
+</body>
+</html>

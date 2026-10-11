@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚙️ API 配置中心</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            padding: 16px;
+            min-height: 100vh;
+        }
+        .config-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a4a;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .config-header h2 {
+            color: #ffd866;
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .config-header .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #8888aa;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card-title .badge {
+            font-size: 11px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: normal;
+        }
+        .badge-online { background: #4ade8020; color: #4ade80; }
+        .badge-offline { background: #f8717120; color: #f87171; }
+        .badge-unknown { background: #2a2a4a; color: #888; }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            color: #8888aa;
+            margin-bottom: 3px;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #ffd866;
+        }
+        .form-group .hint {
+            font-size: 11px;
+            color: #555;
+            margin-top: 3px;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .form-row .form-group {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #ffd866;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #ffe080;
+            transform: translateY(-1px);
+        }
+        .btn-success {
+            background: #4ade80;
+            color: #1a1a2e;
+        }
+        .btn-success:hover {
+            background: #5be890;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background: #f87171;
+            color: #1a1a2e;
+        }
+        .btn-danger:hover {
+            background: #fc8181;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: #2a2a4a;
+            color: #c0c0d0;
+        }
+        .btn-secondary:hover {
+            background: #3a3a5a;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .status-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .status-row .item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #8888aa;
+        }
+        .status-row .item .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot-green { background: #4ade80; }
+        .dot-red { background: #f87171; }
+        .dot-yellow { background: #fbbf24; }
+        .dot-gray { background: #444; }
+
+        .toggle-group {
+            display: flex;
+            gap: 6px;
+            background: #0f0f1a;
+            border-radius: 8px;
+            padding: 4px;
+            border: 1px solid #2a2a4a;
+        }
+        .toggle-group .toggle-btn {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            background: transparent;
+            color: #888;
+            transition: all 0.2s;
+        }
+        .toggle-group .toggle-btn.active {
+            background: #ffd866;
+            color: #1a1a2e;
+        }
+        .toggle-group .toggle-btn:hover:not(.active) {
+            background: #2a2a4a;
+            color: #e0e0e0;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a3a;
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            font-size: 14px;
+            z-index: 999;
+            animation: fadeInUp 0.3s ease;
+            max-width: 90%;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .toast.success { border-color: #4ade80; }
+        .toast.error { border-color: #f87171; }
+
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; }
+            .config-header { flex-direction: column; align-items: flex-start; }
+            .config-header .actions { width: 100%; }
+            .config-header .actions .btn { flex: 1; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <!-- 头部 -->
+        <div class="config-header">
+            <h2>⚙️ API 配置中心</h2>
+            <div class="actions">
+                <button class="btn btn-secondary btn-sm" id="loadConfigBtn">📥 加载配置</button>
+                <button class="btn btn-primary btn-sm" id="saveConfigBtn">💾 保存配置</button>
+                <button class="btn btn-danger btn-sm" id="resetConfigBtn">🔄 重置</button>
+            </div>
+        </div>
+
+        <!-- 服务切换 -->
+        <div class="card">
+            <div class="card-title">📡 默认生图引擎</div>
+            <div class="toggle-group" id="engineToggle">
+                <button class="toggle-btn active" data-engine="comfyui">🖥️ ComfyUI</button>
+                <button class="toggle-btn" data-engine="novelai">🎨 NovelAI</button>
+            </div>
+            <div class="status-row" style="margin-top:8px;">
+                <span class="item">当前引擎: <strong id="currentEngineDisplay">ComfyUI</strong></span>
+                <span class="item">状态: <span class="dot" id="engineStatusDot"></span><span id="engineStatusText">未检测</span></span>
+            </div>
+        </div>
+
+        <!-- ComfyUI 配置 -->
+        <div class="card" id="comfyuiConfig">
+            <div class="card-title">
+                🖥️ ComfyUI 配置
+                <span class="badge" id="comfyuiBadge" class="badge-unknown">未连接</span>
+            </div>
+            <div class="form-group">
+                <label>ComfyUI URL</label>
+                <input type="text" id="comfyuiUrl" value="http://127.0.0.1:8188" placeholder="http://127.0.0.1:8188">
+                <div class="hint">需要 ComfyUI 允许跨域访问；局域网访问需监听 0.0.0.0</div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>请求超时（秒）</label>
+                    <input type="number" id="comfyuiTimeout" value="120" min="10">
+                </div>
+                <div class="form-group">
+                    <label>轮询间隔（ms）</label>
+                    <input type="number" id="comfyuiPollInterval" value="1200" min="500">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-success btn-sm" id="testComfyuiBtn">🔍 测试连接</button>
+                <button class="btn btn-secondary btn-sm" id="openComfyuiBtn">📂 打开 ComfyUI</button>
+            </div>
+        </div>
+
+        <!-- NovelAI 配置 -->
+        <div class="card" id="novelaiConfig">
+            <div class="card-title">
+                🎨 NovelAI 配置
+                <span class="badge" id="novelaiBadge" class="badge-unknown">未配置</span>
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="novelaiApiKey" placeholder="输入你的 NovelAI API Key...">
+                <div class="hint">在平台「Key管理」页面获取</div>
+            </div>
+            <div class="form-group">
+                <label>API 地址</label>
+                <input type="text" id="novelaiApiUrl" value="https://dangao.iisbo.com/api/v1/novelai" placeholder="https://dangao.iisbo.com/api/v1/novelai">
+                <div class="hint">默认使用蛋糕生图 API</div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>默认模型</label>
+                    <select id="novelaiModel">
+                        <option value="nai-diffusion-5-full">NAI Diffusion 5 Full</option>
+                        <option value="nai-diffusion-5">NAI Diffusion 5</option>
+                        <option value="nai-diffusion-4-full">NAI Diffusion 4 Full</option>
+                        <option value="nai-diffusion-4">NAI Diffusion 4</option>
+                        <option value="nai-diffusion-3">NAI Diffusion 3</option>
+                        <option value="nai-diffusion-2">NAI Diffusion 2</option>
+                        <option value="nai-diffusion">NAI Diffusion</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>默认采样器</label>
+                    <select id="novelaiSampler">
+                        <option value="k_euler">Euler</option>
+                        <option value="k_euler_ancestral" selected>Euler Ancestral</option>
+                        <option value="k_dpmpp_2m">DPM++ 2M</option>
+                        <option value="k_dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
+                        <option value="k_dpmpp_sde">DPM++ SDE</option>
+                        <option value="ddim">DDIM</option>
+                        <option value="plms">PLMS</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>默认宽度</label>
+                    <select id="novelaiWidth">
+                        <option value="512">512</option>
+                        <option value="640">640</option>
+                        <option value="768">768</option>
+                        <option value="832" selected>832</option>
+                        <option value="1024">1024</option>
+                        <option value="1216">1216</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>默认高度</label>
+                    <select id="novelaiHeight">
+                        <option value="512">512</option>
+                        <option value="640">640</option>
+                        <option value="768">768</option>
+                        <option value="832">832</option>
+                        <option value="1024">1024</option>
+                        <option value="1216" selected>1216</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>默认步数</label>
+                    <input type="number" id="novelaiSteps" value="28" min="1" max="50">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-success btn-sm" id="testNovelaiBtn">🔍 测试连接</button>
+                <button class="btn btn-secondary btn-sm" id="fetchNovelaiModelsBtn">📥 获取模型列表</button>
+            </div>
+        </div>
+
+        <!-- ====== LLM 配置（AI 分析）优化版 ====== -->
+        <div class="card">
+            <div class="card-title">
+                🧠 AI 分析配置
+                <span class="badge" id="llmBadge" class="badge-unknown">未配置</span>
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="llmApiKey" placeholder="输入你的 LLM API Key...">
+                <div class="hint">支持 OpenAI、DeepSeek、火山引擎等兼容接口</div>
+            </div>
+            <div class="form-group">
+                <label>API URL</label>
+                <input type="text" id="llmApiUrl" value="https://api.openai.com/v1/chat/completions" placeholder="https://api.openai.com/v1/chat/completions">
+                <div class="hint">OpenAI: https://api.openai.com/v1/chat/completions</div>
+            </div>
+            <div class="form-group">
+                <label>模型名称 <span id="llmModelLabel" style="color:#4ade80;font-weight:normal;font-size:12px;"></span></label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="llmModel" value="gpt-4" placeholder="输入模型名称，如 gpt-4 / deepseek-chat" list="llmModelList" style="flex:1;">
+                    <button class="btn btn-secondary btn-sm" id="fetchLlmModelsBtn" style="white-space:nowrap;">📥 获取模型</button>
+                </div>
+                <datalist id="llmModelList">
+                    <option value="gpt-4">
+                    <option value="gpt-4-turbo">
+                    <option value="gpt-3.5-turbo">
+                    <option value="deepseek-chat">
+                    <option value="deepseek-coder">
+                    <option value="claude-3-opus">
+                    <option value="claude-3-sonnet">
+                    <option value="假流式-gemini-3.1-pro-preview">
+                    <option value="gemini-3.1-pro-preview">
+                    <option value="gemini-2.0-flash">
+                </datalist>
+                <div class="hint" id="llmModelHint">💡 点击「获取模型」从 API 拉取，也可手动输入任意模型名称</div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>请求超时（秒）</label>
+                    <input type="number" id="llmTimeout" value="60" min="10">
+                </div>
+            </div>
+            <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-success btn-sm" id="testLlmBtn">🔍 测试连接</button>
+            </div>
+        </div>
+
+        <!-- 状态汇总 -->
+        <div class="card">
+            <div class="card-title">📊 服务状态汇总</div>
+            <div class="status-row" id="statusSummary">
+                <span class="item">🔍 点击各服务「测试连接」按钮检测状态</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  1. 配置数据管理
+        // ============================================================
+        const CONFIG_KEY = 'api_config';
+
+        function getDefaultConfig() {
+            return {
+                defaultEngine: 'comfyui',
+                comfyui: {
+                    url: 'http://127.0.0.1:8188',
+                    timeout: 120,
+                    pollInterval: 1200
+                },
+                novelai: {
+                    apiKey: '',
+                    apiUrl: 'https://dangao.iisbo.com/api/v1/novelai',
+                    model: 'nai-diffusion-5-full',
+                    sampler: 'k_euler_ancestral',
+                    width: 832,
+                    height: 1216,
+                    steps: 28
+                },
+                llm: {
+                    apiKey: '',
+                    apiUrl: 'https://api.openai.com/v1/chat/completions',
+                    model: 'gpt-4',
+                    timeout: 60
+                }
+            };
+        }
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem(CONFIG_KEY);
+                if (!raw) return getDefaultConfig();
+                const config = JSON.parse(raw);
+                const def = getDefaultConfig();
+                return { ...def, ...config };
+            } catch (e) {
+                return getDefaultConfig();
+            }
+        }
+
+        function saveConfigToStorage(config) {
+            try {
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        // ============================================================
+        //  2. UI 渲染
+        // ============================================================
+        function renderConfig(config) {
+            const engine = config.defaultEngine || 'comfyui';
+            document.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.engine === engine);
+            });
+            document.getElementById('currentEngineDisplay').textContent = engine === 'comfyui' ? 'ComfyUI' : 'NovelAI';
+
+            document.getElementById('comfyuiUrl').value = config.comfyui.url || 'http://127.0.0.1:8188';
+            document.getElementById('comfyuiTimeout').value = config.comfyui.timeout || 120;
+            document.getElementById('comfyuiPollInterval').value = config.comfyui.pollInterval || 1200;
+
+            document.getElementById('novelaiApiKey').value = config.novelai.apiKey || '';
+            document.getElementById('novelaiApiUrl').value = config.novelai.apiUrl || 'https://dangao.iisbo.com/api/v1/novelai';
+            document.getElementById('novelaiModel').value = config.novelai.model || 'nai-diffusion-5-full';
+            document.getElementById('novelaiSampler').value = config.novelai.sampler || 'k_euler_ancestral';
+            document.getElementById('novelaiWidth').value = config.novelai.width || 832;
+            document.getElementById('novelaiHeight').value = config.novelai.height || 1216;
+            document.getElementById('novelaiSteps').value = config.novelai.steps || 28;
+
+            document.getElementById('llmApiKey').value = config.llm.apiKey || '';
+            document.getElementById('llmApiUrl').value = config.llm.apiUrl || 'https://api.openai.com/v1/chat/completions';
+            document.getElementById('llmModel').value = config.llm.model || 'gpt-4';
+            document.getElementById('llmTimeout').value = config.llm.timeout || 60;
+
+            // 显示当前模型名称
+            const modelLabel = document.getElementById('llmModelLabel');
+            if (modelLabel) {
+                const model = config.llm.model || 'gpt-4';
+                modelLabel.textContent = `(当前: ${model})`;
+            }
+
+            updateStatusDisplay(config);
+        }
+
+        function getConfigFromUI() {
+            return {
+                defaultEngine: document.querySelector('.toggle-btn.active')?.dataset.engine || 'comfyui',
+                comfyui: {
+                    url: document.getElementById('comfyuiUrl').value.trim(),
+                    timeout: parseInt(document.getElementById('comfyuiTimeout').value) || 120,
+                    pollInterval: parseInt(document.getElementById('comfyuiPollInterval').value) || 1200
+                },
+                novelai: {
+                    apiKey: document.getElementById('novelaiApiKey').value.trim(),
+                    apiUrl: document.getElementById('novelaiApiUrl').value.trim(),
+                    model: document.getElementById('novelaiModel').value,
+                    sampler: document.getElementById('novelaiSampler').value,
+                    width: parseInt(document.getElementById('novelaiWidth').value) || 832,
+                    height: parseInt(document.getElementById('novelaiHeight').value) || 1216,
+                    steps: parseInt(document.getElementById('novelaiSteps').value) || 28
+                },
+                llm: {
+                    apiKey: document.getElementById('llmApiKey').value.trim(),
+                    apiUrl: document.getElementById('llmApiUrl').value.trim(),
+                    model: document.getElementById('llmModel').value.trim() || 'gpt-4',
+                    timeout: parseInt(document.getElementById('llmTimeout').value) || 60
+                }
+            };
+        }
+
+        function updateStatusDisplay(config) {
+            const comfyuiBadge = document.getElementById('comfyuiBadge');
+            if (config.comfyui.url) {
+                comfyuiBadge.textContent = '⏳ 待检测';
+                comfyuiBadge.className = 'badge badge-unknown';
+            }
+
+            const novelaiBadge = document.getElementById('novelaiBadge');
+            if (config.novelai.apiKey) {
+                novelaiBadge.textContent = '⏳ 待检测';
+                novelaiBadge.className = 'badge badge-unknown';
+            } else {
+                novelaiBadge.textContent = '未配置';
+                novelaiBadge.className = 'badge badge-offline';
+            }
+
+            const llmBadge = document.getElementById('llmBadge');
+            if (config.llm.apiKey) {
+                llmBadge.textContent = '⏳ 待检测';
+                llmBadge.className = 'badge badge-unknown';
+            } else {
+                llmBadge.textContent = '未配置';
+                llmBadge.className = 'badge badge-offline';
+            }
+        }
+
+        // ============================================================
+        //  3. 状态检测
+        // ============================================================
+
+        async function testComfyui() {
+            const url = document.getElementById('comfyuiUrl').value.trim();
+            const badge = document.getElementById('comfyuiBadge');
+
+            if (!url) {
+                showToast('⚠️ 请先配置 ComfyUI URL', 'error');
+                return;
+            }
+
+            badge.textContent = '⏳ 检测中...';
+            badge.className = 'badge badge-unknown';
+
+            try {
+                const response = await fetch(`${url}/system_stats`, {
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (response.ok) {
+                    badge.textContent = '✅ 已连接';
+                    badge.className = 'badge badge-online';
+                    showToast('✅ ComfyUI 连接成功', 'success');
+                    updateEngineStatus('comfyui', true);
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                badge.textContent = '❌ 连接失败';
+                badge.className = 'badge badge-offline';
+                showToast(`❌ ComfyUI 连接失败: ${error.message}`, 'error');
+                updateEngineStatus('comfyui', false);
+            }
+        }
+
+        async function testNovelai() {
+            const apiKey = document.getElementById('novelaiApiKey').value.trim();
+            const apiUrl = document.getElementById('novelaiApiUrl').value.trim();
+            const badge = document.getElementById('novelaiBadge');
+
+            if (!apiKey) {
+                showToast('⚠️ 请先配置 NovelAI API Key', 'error');
+                return;
+            }
+            if (!apiUrl) {
+                showToast('⚠️ 请先配置 NovelAI API 地址', 'error');
+                return;
+            }
+
+            badge.textContent = '⏳ 检测中...';
+            badge.className = 'badge badge-unknown';
+
+            try {
+                const testData = {
+                    input: 'test',
+                    model: 'nai-diffusion-5',
+                    action: 'generate',
+                    parameters: {
+                        width: 64,
+                        height: 64,
+                        scale: 1,
+                        sampler: 'k_euler',
+                        steps: 1,
+                        n_samples: 1,
+                        negative_prompt: 'test'
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData),
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.status === 401) {
+                    throw new Error('API Key 无效');
+                } else if (response.status === 402 || response.status === 403) {
+                    throw new Error('余额不足或权限不足');
+                } else if (response.status === 200 || response.status === 400) {
+                    badge.textContent = '✅ API Key 有效';
+                    badge.className = 'badge badge-online';
+                    showToast('✅ NovelAI API Key 有效', 'success');
+                    updateEngineStatus('novelai', true);
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                badge.textContent = '❌ 无效';
+                badge.className = 'badge badge-offline';
+                showToast(`❌ NovelAI 检测失败: ${error.message}`, 'error');
+                updateEngineStatus('novelai', false);
+            }
+        }
+
+        async function testLlm() {
+            const apiKey = document.getElementById('llmApiKey').value.trim();
+            const apiUrl = document.getElementById('llmApiUrl').value.trim();
+            const badge = document.getElementById('llmBadge');
+
+            if (!apiKey) {
+                showToast('⚠️ 请先配置 LLM API Key', 'error');
+                return;
+            }
+
+            badge.textContent = '⏳ 检测中...';
+            badge.className = 'badge badge-unknown';
+
+            try {
+                const model = document.getElementById('llmModel').value.trim() || 'gpt-4';
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: 'Hello' }],
+                        max_tokens: 5
+                    }),
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.status === 401) {
+                    throw new Error('API Key 无效');
+                } else if (response.status === 404) {
+                    throw new Error(`模型 "${model}" 不存在，请检查模型名称`);
+                } else if (response.ok || response.status === 400) {
+                    badge.textContent = '✅ 已配置';
+                    badge.className = 'badge badge-online';
+                    showToast(`✅ LLM API 配置有效 (${model})`, 'success');
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                if (error.message.includes('API Key 无效')) {
+                    badge.textContent = '❌ Key 无效';
+                } else if (error.message.includes('模型')) {
+                    badge.textContent = '❌ 模型错误';
+                } else {
+                    badge.textContent = '⚠️ 连接异常';
+                }
+                badge.className = 'badge badge-offline';
+                showToast(`⚠️ LLM 检测: ${error.message}`, 'error');
+            }
+        }
+
+        function updateEngineStatus(engine, online) {
+            const dot = document.getElementById('engineStatusDot');
+            const text = document.getElementById('engineStatusText');
+            
+            if (engine === document.querySelector('.toggle-btn.active')?.dataset.engine) {
+                if (online) {
+                    dot.className = 'dot dot-green';
+                    text.textContent = '🟢 在线';
+                } else {
+                    dot.className = 'dot dot-red';
+                    text.textContent = '🔴 离线';
+                }
+            }
+        }
+
+        // ============================================================
+        //  4. 获取 NovelAI 模型列表
+        // ============================================================
+        async function fetchNovelaiModels() {
+            const apiKey = document.getElementById('novelaiApiKey').value.trim();
+
+            if (!apiKey) {
+                showToast('⚠️ 请先配置 NovelAI API Key', 'error');
+                return;
+            }
+
+            showToast('📥 正在获取模型列表...', 'info');
+
+            try {
+                const response = await fetch('/api/novelai-models', {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.success && data.models) {
+                    const select = document.getElementById('novelaiModel');
+                    select.innerHTML = '';
+                    for (const model of data.models) {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        select.appendChild(option);
+                    }
+                    showToast(`✅ 获取到 ${data.models.length} 个模型`, 'success');
+                } else {
+                    throw new Error(data.error || '获取失败');
+                }
+            } catch (error) {
+                showToast(`⚠️ 获取模型列表失败: ${error.message}`, 'error');
+            }
+        }
+
+        // ============================================================
+        //  5. 获取 LLM 模型列表（优化版）
+        // ============================================================
+        async function fetchLlmModels() {
+            const apiKey = document.getElementById('llmApiKey').value.trim();
+            const apiUrl = document.getElementById('llmApiUrl').value.trim();
+
+            if (!apiKey) {
+                showToast('⚠️ 请先配置 LLM API Key', 'error');
+                return;
+            }
+            if (!apiUrl) {
+                showToast('⚠️ 请先配置 LLM API URL', 'error');
+                return;
+            }
+
+            showToast('📥 正在获取模型列表...', 'info');
+
+            try {
+                const response = await fetch('/api/llm-models', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ apiUrl, apiKey })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.models && data.models.length > 0) {
+                    const datalist = document.getElementById('llmModelList');
+                    datalist.innerHTML = '';
+                    
+                    const uniqueModels = [...new Set(data.models)];
+                    
+                    for (const model of uniqueModels) {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        datalist.appendChild(option);
+                    }
+                    
+                    document.getElementById('llmModelHint').textContent = 
+                        `✅ 已获取 ${uniqueModels.length} 个模型，点击输入框查看下拉列表，也可手动输入`;
+                    
+                    showToast(`✅ 获取到 ${uniqueModels.length} 个模型`, 'success');
+                } else {
+                    document.getElementById('llmModelHint').textContent = 
+                        '⚠️ 该 API 未返回模型列表，请手动输入模型名称（如 gpt-4, deepseek-chat）';
+                    showToast('⚠️ 未获取到模型列表，请手动输入', 'warn');
+                }
+            } catch (error) {
+                console.error('获取模型失败:', error);
+                document.getElementById('llmModelHint').textContent = 
+                    '⚠️ 获取模型列表失败，请手动输入模型名称';
+                showToast(`⚠️ 获取模型列表失败: ${error.message}`, 'error');
+            }
+        }
+
+        // ============================================================
+        //  6. 配置操作
+        // ============================================================
+        function saveConfig() {
+            const config = getConfigFromUI();
+            if (saveConfigToStorage(config)) {
+                showToast('💾 配置已保存', 'success');
+            } else {
+                showToast('❌ 保存失败', 'error');
+            }
+        }
+
+        function loadConfigFromStorage() {
+            const config = loadConfig();
+            renderConfig(config);
+            showToast('📥 配置已加载', 'success');
+        }
+
+        function resetConfig() {
+            if (!confirm('确定重置所有配置吗？')) return;
+            localStorage.removeItem(CONFIG_KEY);
+            const config = getDefaultConfig();
+            renderConfig(config);
+            showToast('🔄 已重置为默认配置', 'success');
+        }
+
+        // ============================================================
+        //  7. Toast 提示
+        // ============================================================
+        function showToast(msg, type = 'info') {
+            const old = document.querySelector('.toast');
+            if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ============================================================
+        //  8. 事件绑定
+        // ============================================================
+
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('currentEngineDisplay').textContent = btn.dataset.engine === 'comfyui' ? 'ComfyUI' : 'NovelAI';
+                const dot = document.getElementById('engineStatusDot');
+                const text = document.getElementById('engineStatusText');
+                dot.className = 'dot dot-gray';
+                text.textContent = '未检测';
+            });
+        });
+
+        document.getElementById('testComfyuiBtn').addEventListener('click', testComfyui);
+        document.getElementById('testNovelaiBtn').addEventListener('click', testNovelai);
+        document.getElementById('testLlmBtn').addEventListener('click', testLlm);
+
+        document.getElementById('fetchNovelaiModelsBtn').addEventListener('click', fetchNovelaiModels);
+        document.getElementById('fetchLlmModelsBtn').addEventListener('click', fetchLlmModels);
+
+        document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+        document.getElementById('loadConfigBtn').addEventListener('click', loadConfigFromStorage);
+        document.getElementById('resetConfigBtn').addEventListener('click', resetConfig);
+
+        document.getElementById('openComfyuiBtn').addEventListener('click', () => {
+            const url = document.getElementById('comfyuiUrl').value.trim();
+            if (url) window.open(url, '_blank');
+        });
+
+        let saveTimer;
+        document.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', () => {
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(saveConfig, 500);
+            });
+        });
+
+        // ============================================================
+        //  9. 初始化
+        // ============================================================
+
+        const config = loadConfig();
+        renderConfig(config);
+        console.log('⚙️ API 配置中心已加载');
+
+        if (config.comfyui.url) {
+            setTimeout(testComfyui, 500);
+        }
+        if (config.novelai.apiKey) {
+            setTimeout(testNovelai, 800);
+        }
+        if (config.llm.apiKey) {
+            setTimeout(testLlm, 1100);
+        }
+    </script>
+</body>
+</html>

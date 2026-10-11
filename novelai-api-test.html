@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 NovelAI API 测试</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            padding: 16px;
+            min-height: 100vh;
+        }
+        .test-container {
+            max-width: 950px;
+            margin: 0 auto;
+        }
+
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #2a2a4a;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .test-header h2 {
+            color: #ff6b9d;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .test-header .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+        }
+        .status-badge .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot.online { background: #4ade80; }
+        .dot.offline { background: #f87171; }
+        .dot.checking { background: #fbbf24; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .card {
+            background: #14142a;
+            border: 1px solid #2a2a4a;
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #8888aa;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .badge {
+            font-size: 10px;
+            background: #ff6b9d20;
+            color: #ff6b9d;
+            padding: 1px 10px;
+            border-radius: 10px;
+            font-weight: normal;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            color: #8888aa;
+            margin-bottom: 3px;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #ff6b9d;
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+            font-family: inherit;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .form-group .hint {
+            font-size: 11px;
+            color: #555;
+            margin-top: 3px;
+        }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .form-row .form-group {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .btn {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #ff6b9d;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #ff7fab;
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: #2a2a4a;
+            color: #c0c0d0;
+        }
+        .btn-secondary:hover {
+            background: #3a3a5a;
+        }
+        .btn-success {
+            background: #4ade80;
+            color: #1a1a2e;
+        }
+        .btn-success:hover {
+            background: #5be890;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .image-preview {
+            margin-top: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #0a0a14;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed #2a2a4a;
+            position: relative;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px;
+        }
+        .image-preview img {
+            max-width: 100%;
+            max-height: 450px;
+            object-fit: contain;
+            display: block;
+            border-radius: 6px;
+        }
+        .image-preview .placeholder {
+            color: #555;
+            font-size: 14px;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .image-preview .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 8px;
+            border-radius: 8px;
+        }
+        .image-preview .loading-overlay .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2a2a4a;
+            border-top-color: #ff6b9d;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .image-preview .image-item {
+            position: relative;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #2a2a4a;
+        }
+        .image-preview .image-item .index {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            background: rgba(0,0,0,0.7);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #ffd866;
+        }
+
+        .log-area {
+            background: #0a0a14;
+            border-radius: 6px;
+            padding: 10px 12px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+        .log-area .log-line {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .log-area .log-line .time {
+            color: #555;
+            margin-right: 8px;
+        }
+        .log-area .log-line .level-info { color: #60a5fa; }
+        .log-area .log-line .level-success { color: #4ade80; }
+        .log-area .log-line .level-error { color: #f87171; }
+        .log-area .log-line .level-warn { color: #fbbf24; }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a3a;
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            font-size: 14px;
+            z-index: 999;
+            animation: fadeInUp 0.3s ease;
+            max-width: 90%;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        .toast.success { border-color: #4ade80; }
+        .toast.error { border-color: #f87171; }
+
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; }
+            .test-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <!-- 头部 -->
+        <div class="test-header">
+            <h2>🎨 NovelAI API 测试 <span class="badge" style="font-size:12px;background:#ff6b9d20;color:#ff6b9d;padding:2px 10px;border-radius:12px;">/api/v1/novelai</span></h2>
+            <div class="status-badge">
+                <span class="dot" id="statusDot"></span>
+                <span id="statusText">检测中...</span>
+                <button class="btn btn-sm btn-secondary" id="checkStatusBtn">重新检测</button>
+            </div>
+        </div>
+
+        <!-- ====== API 配置 ====== -->
+        <div class="card">
+            <div class="card-title">🔑 API 配置</div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="apiKey" placeholder="输入你的 API Key...">
+                <div class="hint">在平台「Key管理」页面获取</div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>API 地址</label>
+                    <input type="text" id="apiUrl" value="https://dangao.iisbo.com/api/v1/novelai">
+                    <div class="hint">默认使用蛋糕生图 API</div>
+                </div>
+                <div class="form-group" style="flex:0.4;">
+                    <label>超时（秒）</label>
+                    <input type="number" id="timeout" value="120" min="10">
+                </div>
+                <div class="form-group" style="flex:0.3;min-width:80px;">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-secondary" id="fetchModelsBtn" style="width:100%;">📥 获取模型</button>
+                </div>
+                <div class="form-group" style="flex:0.3;min-width:80px;">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-secondary" id="checkStatusBtn" style="width:100%;">🔍 检测</button>
+                </div>
+                <div class="form-group">
+                    <label>模型 (model) <span id="modelCount" style="color:#666;font-weight:normal;"></span></label>
+                    <select id="model">
+                    <option value="">-- 点击「获取模型」加载 --</option>
+                     </select>
+                    <div class="hint" id="modelHint">点击「获取模型」按钮从 API 获取可用模型列表</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== 生图参数 ====== -->
+        <div class="card">
+            <div class="card-title">🎨 生图参数</div>
+
+            <div class="form-group">
+                <label>正向提示词 (input)</label>
+                <textarea id="inputPrompt" rows="2" placeholder="输入正向提示词...">1girl, solo, beautiful, masterpiece, best quality, high resolution, detailed, fantasy art</textarea>
+                <div class="hint">对应 API 的 input 字段</div>
+            </div>
+            <div class="form-group">
+                <label>负向提示词 (negative_prompt)</label>
+                <textarea id="negativePrompt" rows="2" placeholder="输入负向提示词...">nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>模型 (model)</label>
+                    <select id="model">
+                        <option value="nai-diffusion-5-full">NAI Diffusion 5 Full</option>
+                        <option value="nai-diffusion-5">NAI Diffusion 5</option>
+                        <option value="nai-diffusion-4-full">NAI Diffusion 4.5 Full</option>
+                        <option value="nai-diffusion-4">NAI Diffusion 4</option>
+                        <option value="nai-diffusion-3">NAI Diffusion 3</option>
+                        <option value="nai-diffusion-2">NAI Diffusion 2</option>
+                        <option value="nai-diffusion">NAI Diffusion</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>操作 (action)</label>
+                    <select id="action">
+                        <option value="generate">generate</option>
+                        <option value="img2img">img2img</option>
+                        <option value="inpaint">inpaint</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>宽度 (width)</label>
+                    <select id="width">
+                        <option value="512">512</option>
+                        <option value="640">640</option>
+                        <option value="768">768</option>
+                        <option value="832" selected>832</option>
+                        <option value="1024">1024</option>
+                        <option value="1216">1216</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>高度 (height)</label>
+                    <select id="height">
+                        <option value="512">512</option>
+                        <option value="640">640</option>
+                        <option value="768">768</option>
+                        <option value="832">832</option>
+                        <option value="1024">1024</option>
+                        <option value="1216" selected>1216</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>CFG (scale)</label>
+                    <input type="number" id="scale" value="5.0" min="1" max="20" step="0.5">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>采样器 (sampler)</label>
+                    <select id="sampler">
+                        <option value="k_euler">Euler</option>
+                        <option value="k_euler_ancestral" selected>Euler Ancestral</option>
+                        <option value="k_dpmpp_2m">DPM++ 2M</option>
+                        <option value="k_dpmpp_2s_ancestral">DPM++ 2S Ancestral</option>
+                        <option value="k_dpmpp_sde">DPM++ SDE</option>
+                        <option value="k_dpm_fast">DPM Fast</option>
+                        <option value="k_dpm_adaptive">DPM Adaptive</option>
+                        <option value="ddim">DDIM</option>
+                        <option value="plms">PLMS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>步数 (steps)</label>
+                    <input type="number" id="steps" value="28" min="1" max="50">
+                </div>
+                <div class="form-group">
+                    <label>噪声调度 (noise_schedule)</label>
+                    <select id="noiseSchedule">
+                        <option value="karras" selected>Karras</option>
+                        <option value="exponential">Exponential</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>生成数量 (n_samples)</label>
+                    <input type="number" id="nSamples" value="1" min="1" max="4">
+                </div>
+                <div class="form-group">
+                    <label>随机 Seed</label>
+                    <input type="number" id="seed" placeholder="留空则随机">
+                    <div class="hint">留空则随机生成</div>
+                </div>
+            </div>
+
+            <!-- 高级选项 -->
+            <details style="margin-top:8px;">
+                <summary style="cursor:pointer;color:#8888aa;font-size:13px;">⚙️ 高级选项 (SM / SM-DYN)</summary>
+                <div style="margin-top:8px;">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:0.5;">
+                            <label>SM (sm)</label>
+                            <select id="sm">
+                                <option value="false">关闭</option>
+                                <option value="true">开启</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:0.5;">
+                            <label>SM-DYN (sm_dyn)</label>
+                            <select id="smDyn">
+                                <option value="false">关闭</option>
+                                <option value="true">开启</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <!-- ====== 操作按钮 ====== -->
+        <div class="card">
+            <div class="btn-group">
+                <button class="btn btn-primary" id="runTestBtn">▶ 运行测试</button>
+                <button class="btn btn-secondary" id="clearLogBtn">清除日志</button>
+                <button class="btn btn-secondary" id="clearImageBtn">清除图片</button>
+                <button class="btn btn-secondary" id="saveConfigBtn">💾 保存配置</button>
+                <button class="btn btn-secondary" id="loadConfigBtn">📥 加载配置</button>
+                <button class="btn btn-secondary" id="showCodeBtn">📋 查看代码</button>
+            </div>
+        </div>
+
+        <!-- ====== 结果区域 ====== -->
+        <div class="card">
+            <div class="card-title">🖼️ 生成结果</div>
+
+            <div class="image-preview" id="imagePreview">
+                <div class="placeholder">
+                    <div style="font-size:32px;margin-bottom:8px;">🖼️</div>
+                    <div>运行测试后，生成的图片将显示在这里</div>
+                    <div style="font-size:12px;color:#444;margin-top:4px;">支持多图显示</div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:#8888aa;">
+                <span>状态: <span id="taskStatus" style="color:#e0e0e0;">就绪</span></span>
+                <span>耗时: <span id="taskTime" style="color:#e0e0e0;">-</span></span>
+                <span>图片数: <span id="imageCount" style="color:#e0e0e0;">-</span></span>
+            </div>
+
+            <div class="card-title" style="margin-top:12px;">📋 运行日志</div>
+            <div class="log-area" id="logArea">
+                <div class="log-line"><span class="time">[系统]</span><span class="level-info">等待运行测试...</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  1. 数据管理
+        // ============================================================
+        let isRunning = false;
+
+        // DOM 引用
+        const apiKey = document.getElementById('apiKey');
+        const apiUrl = document.getElementById('apiUrl');
+        const timeout = document.getElementById('timeout');
+        const inputPrompt = document.getElementById('inputPrompt');
+        const negativePrompt = document.getElementById('negativePrompt');
+        const model = document.getElementById('model');
+        const action = document.getElementById('action');
+        const width = document.getElementById('width');
+        const height = document.getElementById('height');
+        const scale = document.getElementById('scale');
+        const sampler = document.getElementById('sampler');
+        const steps = document.getElementById('steps');
+        const noiseSchedule = document.getElementById('noiseSchedule');
+        const nSamples = document.getElementById('nSamples');
+        const seed = document.getElementById('seed');
+        const sm = document.getElementById('sm');
+        const smDyn = document.getElementById('smDyn');
+        const imagePreview = document.getElementById('imagePreview');
+        const taskStatus = document.getElementById('taskStatus');
+        const taskTime = document.getElementById('taskTime');
+        const imageCount = document.getElementById('imageCount');
+        const logArea = document.getElementById('logArea');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        // ============================================================
+        //  2. 日志系统
+        // ============================================================
+        function addLog(message, level = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            line.innerHTML = `<span class="time">[${time}]</span><span class="level-${level}">${message}</span>`;
+            logArea.appendChild(line);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearLog() {
+            logArea.innerHTML = '';
+            addLog('日志已清除', 'info');
+        }
+
+        // ============================================================
+        //  3. Toast 提示
+        // ============================================================
+        function showToast(msg, type = 'info') {
+            const old = document.querySelector('.toast');
+            if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ============================================================
+        //  4. 配置保存/加载
+        // ============================================================
+        function saveConfig() {
+            const config = {
+                apiKey: apiKey.value.trim(),
+                apiUrl: apiUrl.value.trim(),
+                timeout: parseInt(timeout.value) || 120,
+                inputPrompt: inputPrompt.value.trim(),
+                negativePrompt: negativePrompt.value.trim(),
+                model: model.value,
+                action: action.value,
+                width: parseInt(width.value) || 832,
+                height: parseInt(height.value) || 1216,
+                scale: parseFloat(scale.value) || 5.0,
+                sampler: sampler.value,
+                steps: parseInt(steps.value) || 28,
+                noiseSchedule: noiseSchedule.value,
+                nSamples: parseInt(nSamples.value) || 1,
+                sm: sm.value,
+                smDyn: smDyn.value
+            };
+            try {
+                localStorage.setItem('novelai_api_config', JSON.stringify(config));
+                showToast('💾 配置已保存', 'success');
+                addLog('💾 配置已保存', 'success');
+            } catch (e) {
+                showToast('❌ 保存失败', 'error');
+            }
+        }
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem('novelai_api_config');
+                if (!raw) return;
+                const config = JSON.parse(raw);
+                apiKey.value = config.apiKey || '';
+                apiUrl.value = config.apiUrl || 'https://dangao.iisbo.com/api/v1/novelai';
+                timeout.value = config.timeout || 120;
+                inputPrompt.value = config.inputPrompt || '1girl, solo, beautiful, masterpiece, best quality, high resolution, detailed, fantasy art';
+                negativePrompt.value = config.negativePrompt || 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry';
+                model.value = config.model || 'nai-diffusion-5-full';
+                action.value = config.action || 'generate';
+                width.value = config.width || 832;
+                height.value = config.height || 1216;
+                scale.value = config.scale || 5.0;
+                sampler.value = config.sampler || 'k_euler_ancestral';
+                steps.value = config.steps || 28;
+                noiseSchedule.value = config.noiseSchedule || 'karras';
+                nSamples.value = config.nSamples || 1;
+                sm.value = config.sm || 'false';
+                smDyn.value = config.smDyn || 'false';
+                addLog('📥 配置已加载', 'info');
+            } catch (e) {
+                console.warn('加载配置失败:', e);
+            }
+        }
+
+        // ============================================================
+        //  5. API 状态检测
+        // ============================================================
+        async function checkApiStatus() {
+            const url = apiUrl.value.trim();
+            const key = apiKey.value.trim();
+
+            if (!url) {
+                statusDot.className = 'dot offline';
+                statusText.textContent = '🔴 请配置 API 地址';
+                return false;
+            }
+            if (!key) {
+                statusDot.className = 'dot offline';
+                statusText.textContent = '🔴 请配置 API Key';
+                return false;
+            }
+
+            statusDot.className = 'dot checking';
+            statusText.textContent = '检测中...';
+
+            try {
+                // 简单测试：用最小的请求检测 API Key 是否有效
+                const testData = {
+                    input: 'test',
+                    model: 'nai-diffusion-5',
+                    action: 'generate',
+                    parameters: {
+                        width: 64,
+                        height: 64,
+                        scale: 1,
+                        sampler: 'k_euler',
+                        steps: 1,
+                        n_samples: 1,
+                        negative_prompt: 'test'
+                    }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData),
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.status === 401) {
+                    throw new Error('API Key 无效，请检查');
+                } else if (response.status === 402 || response.status === 403) {
+                    throw new Error('账户余额不足或权限不足');
+                } else if (response.status === 429) {
+                    throw new Error('请求过于频繁，请稍后再试');
+                } else if (response.status === 200 || response.status === 400) {
+                    // 400 表示参数错误，但说明 API Key 是有效的
+                    statusDot.className = 'dot online';
+                    statusText.textContent = '🟢 API Key 有效';
+                    addLog('✅ API Key 验证通过', 'success');
+                    return true;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                statusDot.className = 'dot offline';
+                if (error.message.includes('API Key 无效')) {
+                    statusText.textContent = '🔴 API Key 无效';
+                } else if (error.message.includes('余额') || error.message.includes('权限')) {
+                    statusText.textContent = '🔴 余额不足或权限不足';
+                } else if (error.message.includes('频繁')) {
+                    statusText.textContent = '🔴 请求过于频繁';
+                } else if (error.message.includes('Abort') || error.message.includes('超时')) {
+                    statusText.textContent = '🔴 连接超时';
+                } else {
+                    statusText.textContent = '🔴 连接失败';
+                }
+                addLog(`❌ 检测失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // ============================================================
+        //  6. 核心生图函数
+        // ============================================================
+        async function runTest() {
+            if (isRunning) {
+                showToast('⏳ 正在运行中，请等待', 'warn');
+                return;
+            }
+
+            const url = apiUrl.value.trim();
+            const key = apiKey.value.trim();
+
+            if (!url) {
+                showToast('⚠️ 请配置 API 地址', 'error');
+                return;
+            }
+            if (!key) {
+                showToast('⚠️ 请配置 API Key', 'error');
+                return;
+            }
+
+            // 准备参数
+            const input = inputPrompt.value.trim() || '1girl, solo, beautiful';
+            const negative = negativePrompt.value.trim() || 'nsfw, lowres, bad anatomy';
+            const modelVal = model.value;
+            const actionVal = action.value;
+            const widthVal = parseInt(width.value) || 832;
+            const heightVal = parseInt(height.value) || 1216;
+            const scaleVal = parseFloat(scale.value) || 5.0;
+            const samplerVal = sampler.value;
+            const stepsVal = parseInt(steps.value) || 28;
+            const noiseScheduleVal = noiseSchedule.value;
+            const nSamplesVal = parseInt(nSamples.value) || 1;
+            const seedVal = seed.value ? parseInt(seed.value) : undefined;
+            const smVal = sm.value === 'true';
+            const smDynVal = smDyn.value === 'true';
+
+            // 构建请求体（完全匹配测试代码格式）
+            const payload = {
+                input: input,
+                model: modelVal,
+                action: actionVal,
+                parameters: {
+                    width: widthVal,
+                    height: heightVal,
+                    scale: scaleVal,
+                    sampler: samplerVal,
+                    steps: stepsVal,
+                    n_samples: nSamplesVal,
+                    noise_schedule: noiseScheduleVal,
+                    negative_prompt: negative,
+                    sm: smVal,
+                    sm_dyn: smDynVal
+                }
+            };
+
+            if (seedVal !== undefined && !isNaN(seedVal)) {
+                payload.parameters.seed = seedVal;
+            }
+
+            addLog(`📤 发送请求到: ${url}`, 'info');
+            addLog(`📝 提示词: ${input.slice(0, 50)}...`, 'info');
+            addLog(`📐 尺寸: ${widthVal}x${heightVal}, 步数: ${stepsVal}`, 'info');
+            addLog(`🎲 Seed: ${seedVal || '随机'}`, 'info');
+
+            // 开始运行
+            isRunning = true;
+            document.getElementById('runTestBtn').disabled = true;
+            document.getElementById('runTestBtn').textContent = '⏳ 运行中...';
+            taskStatus.textContent = '生成中...';
+            taskTime.textContent = '-';
+            imageCount.textContent = '-';
+
+            imagePreview.innerHTML = `
+                <div class="loading-overlay">
+                    <div class="spinner"></div>
+                    <div style="color:#ff6b9d;">⏳ 生成中...</div>
+                </div>
+            `;
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    signal: AbortSignal.timeout((parseInt(timeout.value) || 120) * 1000)
+                });
+
+                if (!response.ok) {
+                    let errorMsg = `HTTP ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.error || errorData.message || JSON.stringify(errorData);
+                    } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+
+                const data = await response.json();
+
+                // 解析响应
+                if (data.success) {
+                    const images = data.images || [];
+                    imageCount.textContent = images.length;
+
+                    if (images.length === 0) {
+                        imagePreview.innerHTML = `
+                            <div class="placeholder">
+                                <div>⚠️ 未返回图片</div>
+                                <pre style="text-align:left;font-size:11px;max-height:200px;overflow:auto;background:#0a0a14;padding:10px;border-radius:4px;margin-top:8px;">${JSON.stringify(data, null, 2)}</pre>
+                            </div>
+                        `;
+                        addLog('⚠️ 响应中未找到图片', 'warn');
+                    } else {
+                        // 显示所有图片
+                        let html = '';
+                        for (let i = 0; i < images.length; i++) {
+                            const img = images[i];
+                            // 如果是 base64 格式
+                            let imgSrc = img;
+                            if (img && !img.startsWith('data:image')) {
+                                imgSrc = `data:image/png;base64,${img}`;
+                            }
+                            html += `
+                                <div class="image-item">
+                                    ${images.length > 1 ? `<span class="index">#${i+1}</span>` : ''}
+                                    <img src="${imgSrc}" alt="生成图片 ${i+1}" onerror="this.parentElement.innerHTML='<div style=\\'padding:20px;color:#f87171;\\'>图片 ${i+1} 加载失败</div>'">
+                                </div>
+                            `;
+                        }
+                        imagePreview.innerHTML = html;
+                        addLog(`✅ 生成 ${images.length} 张图片`, 'success');
+                    }
+
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    taskTime.textContent = `${elapsed}s`;
+                    taskStatus.textContent = '✅ 完成';
+                    addLog(`✅ 生成完成！耗时 ${elapsed}s`, 'success');
+                    showToast(`✅ 生成 ${images.length} 张图片成功！`, 'success');
+
+                } else {
+                    // 生成失败
+                    const errorMsg = data.error || data.message || '未知错误';
+                    taskStatus.textContent = '❌ 失败';
+                    addLog(`❌ 生成失败: ${errorMsg}`, 'error');
+                    showToast(`❌ 生成失败: ${errorMsg}`, 'error');
+                    imagePreview.innerHTML = `
+                        <div class="placeholder">
+                            <div style="font-size:32px;color:#f87171;">❌</div>
+                            <div style="color:#f87171;">生成失败</div>
+                            <div style="font-size:12px;color:#555;margin-top:4px;">${errorMsg}</div>
+                            <pre style="text-align:left;font-size:11px;max-height:150px;overflow:auto;background:#0a0a14;padding:10px;border-radius:4px;margin-top:8px;">${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                let errorMsg = error.message;
+                if (error.name === 'AbortError' || errorMsg.includes('Abort')) {
+                    errorMsg = '请求超时，请检查网络或增加超时时间';
+                }
+                taskStatus.textContent = '❌ 失败';
+                addLog(`❌ 生成失败: ${errorMsg}`, 'error');
+                showToast(`❌ 生成失败: ${errorMsg}`, 'error');
+                imagePreview.innerHTML = `
+                    <div class="placeholder">
+                        <div style="font-size:32px;color:#f87171;">❌</div>
+                        <div style="color:#f87171;">生成失败</div>
+                        <div style="font-size:12px;color:#555;margin-top:4px;">${errorMsg}</div>
+                    </div>
+                `;
+            } finally {
+                isRunning = false;
+                document.getElementById('runTestBtn').disabled = false;
+                document.getElementById('runTestBtn').textContent = '▶ 运行测试';
+                if (taskStatus.textContent === '生成中...') {
+                    taskStatus.textContent = '⏹ 已停止';
+                }
+            }
+        }
+
+        // ============================================================
+        //  7. 查看代码功能
+        // ============================================================
+        function showCode() {
+            const url = apiUrl.value.trim();
+            const key = apiKey.value.trim();
+            const input = inputPrompt.value.trim() || '1girl, solo, beautiful';
+            const negative = negativePrompt.value.trim() || 'nsfw, lowres, bad anatomy';
+            const modelVal = model.value;
+            const actionVal = action.value;
+            const widthVal = parseInt(width.value) || 832;
+            const heightVal = parseInt(height.value) || 1216;
+            const scaleVal = parseFloat(scale.value) || 5.0;
+            const samplerVal = sampler.value;
+            const stepsVal = parseInt(steps.value) || 28;
+            const noiseScheduleVal = noiseSchedule.value;
+            const nSamplesVal = parseInt(nSamples.value) || 1;
+            const seedVal = seed.value ? parseInt(seed.value) : '// 随机';
+            const smVal = sm.value === 'true';
+            const smDynVal = smDyn.value === 'true';
+
+            const code = `const axios = require('axios');
+
+const url = '${url}';
+const headers = {
+  'Authorization': 'Bearer ${key || 'YOUR_API_KEY'}',
+  'Content-Type': 'application/json'
+};
+
+const data = {
+  input: '${input}',
+  model: '${modelVal}',
+  action: '${actionVal}',
+  parameters: {
+    width: ${widthVal},
+    height: ${heightVal},
+    scale: ${scaleVal},
+    sampler: '${samplerVal}',
+    steps: ${stepsVal},
+    n_samples: ${nSamplesVal},
+    noise_schedule: '${noiseScheduleVal}',
+    negative_prompt: '${negative}',
+    sm: ${smVal},
+    sm_dyn: ${smDynVal}
+    ${seedVal !== '// 随机' ? `,\n    seed: ${seedVal}` : ''}
+  }
+};
+
+axios.post(url, data, { headers })
+  .then(response => {
+    if (response.data.success) {
+      const images = response.data.images || [];
+      console.log(\`生成成功，共 \${images.length} 张图片\`);
+      images.forEach((img, i) => {
+        // 保存图片: 将 base64 转为图片文件
+        const buffer = Buffer.from(img, 'base64');
+        require('fs').writeFileSync(\`image_\${i+1}.png\`, buffer);
+        console.log(\`图片 \${i+1} 已保存\`);
+      });
+    } else {
+      console.log('生成失败:', response.data.error);
+    }
+  })
+  .catch(error => {
+    console.error('请求失败:', error);
+  });`;
+
+            // 显示在弹窗中
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; inset: 0; background: rgba(0,0,0,0.8); 
+                z-index: 9999; display: flex; align-items: center; justify-content: center;
+                padding: 20px;
+            `;
+            modal.innerHTML = `
+                <div style="background:#14142a;border-radius:12px;border:1px solid #2a2a4a;padding:20px;max-width:800px;width:100%;max-height:90vh;display:flex;flex-direction:column;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <h3 style="color:#ffd866;">📋 生成的 Node.js 代码</h3>
+                        <button onclick="this.closest('div[style]').parentElement.remove()" style="background:none;border:none;color:#888;font-size:24px;cursor:pointer;">✕</button>
+                    </div>
+                    <pre style="background:#0a0a14;padding:16px;border-radius:8px;overflow:auto;flex:1;font-size:12px;line-height:1.6;font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;color:#e0e0e0;max-height:65vh;">${code}</pre>
+                    <div style="margin-top:12px;display:flex;gap:8px;">
+                        <button onclick="navigator.clipboard.writeText(this.parentElement.previousElementSibling.textContent).then(()=>{showToast('✅ 已复制到剪贴板','success')})" style="padding:6px 16px;border:none;border-radius:6px;background:#ffd866;color:#1a1a2e;cursor:pointer;font-weight:bold;">📋 复制代码</button>
+                        <button onclick="this.closest('div[style]').parentElement.remove()" style="padding:6px 16px;border:none;border-radius:6px;background:#2a2a4a;color:#c0c0d0;cursor:pointer;">关闭</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            // 点击外部关闭
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+
+        // ============================================================
+        //  8. 事件绑定
+        // ============================================================
+
+        document.getElementById('checkStatusBtn').addEventListener('click', checkApiStatus);
+        document.getElementById('runTestBtn').addEventListener('click', runTest);
+        document.getElementById('clearLogBtn').addEventListener('click', clearLog);
+
+        document.getElementById('clearImageBtn').addEventListener('click', () => {
+            imagePreview.innerHTML = `
+                <div class="placeholder">
+                    <div style="font-size:32px;margin-bottom:8px;">🖼️</div>
+                    <div>已清除</div>
+                </div>
+            `;
+            taskStatus.textContent = '就绪';
+            taskTime.textContent = '-';
+            imageCount.textContent = '-';
+            addLog('🗑️ 图片已清除', 'info');
+        });
+
+        document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+        document.getElementById('loadConfigBtn').addEventListener('click', loadConfig);
+        document.getElementById('showCodeBtn').addEventListener('click', showCode);
+
+        // Ctrl+Enter 快捷运行
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runTest();
+            }
+        });
+
+        // ============================================================
+        //  9. 初始化
+        // ============================================================
+
+        loadConfig();
+
+        // 加载配置后自动获取模型
+        if (apiKey.value.trim() && apiUrl.value.trim()) {
+            setTimeout(fetchAvailableModels, 1000);
+        }
+
+        addLog('🎨 NovelAI API 测试已加载', 'info');
+        addLog('💡 提示: Ctrl+Enter 快捷运行测试', 'info');
+
+        // 自动检测
+        if (apiKey.value.trim() && apiUrl.value.trim()) {
+            setTimeout(checkApiStatus, 800);
+        } else {
+            statusDot.className = 'dot offline';
+            statusText.textContent = '🔴 请配置 API Key 和地址';
+        }
+
+        console.log('🎨 NovelAI API 测试已加载');
+        console.log('📡 API 地址:', apiUrl.value);
+
+        
+        // ============================================================
+//  获取可用模型列表
+// ============================================================
+async function fetchAvailableModels() {
+    const url = apiUrl.value.trim();
+    const key = apiKey.value.trim();
+
+    if (!url) {
+        showToast('⚠️ 请先配置 API 地址', 'error');
+        return;
+    }
+    if (!key) {
+        showToast('⚠️ 请先配置 API Key', 'error');
+        return;
+    }
+
+    const modelSelect = document.getElementById('model');
+    const modelCount = document.getElementById('modelCount');
+    const modelHint = document.getElementById('modelHint');
+
+    // 显示加载状态
+    modelSelect.innerHTML = '<option value="">⏳ 加载中...</option>';
+    modelSelect.disabled = true;
+    modelCount.textContent = '(加载中...)';
+    modelHint.textContent = '正在从 API 获取模型列表...';
+
+    addLog('📥 正在获取可用模型列表...', 'info');
+
+    try {
+        // 尝试从 API 获取模型列表
+        // 不同平台的模型获取接口可能不同，尝试多种方式
+        let models = [];
+        let apiPath = '';
+
+        // 方式1: 从主 API 获取（通过 /models 或 /v1/models）
+        const testUrls = [
+            url.replace(/\/api\/v1\/novelai$/, '/api/v1/models'),
+            url.replace(/\/api\/v1\/novelai$/, '/v1/models'),
+            url.replace(/\/api\/v1\/novelai$/, '/models'),
+            url + '/models',
+            url.replace(/\/api\/v1\/novelai$/, '/api/models')
+        ];
+
+        for (const testUrl of testUrls) {
+            try {
+                addLog(`🔍 尝试: ${testUrl}`, 'info');
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: AbortSignal.timeout(8000)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    // 解析不同格式的响应
+                    if (data.models && Array.isArray(data.models)) {
+                        models = data.models;
+                        apiPath = testUrl;
+                        break;
+                    } else if (data.data && Array.isArray(data.data)) {
+                        models = data.data;
+                        apiPath = testUrl;
+                        break;
+                    } else if (data.success && data.models) {
+                        models = data.models;
+                        apiPath = testUrl;
+                        break;
+                    } else if (data.result && Array.isArray(data.result)) {
+                        models = data.result;
+                        apiPath = testUrl;
+                        break;
+                    } else if (Array.isArray(data)) {
+                        models = data;
+                        apiPath = testUrl;
+                        break;
+                    }
+                    // 如果返回的是对象，尝试提取
+                    if (typeof data === 'object') {
+                        for (const key in data) {
+                            if (Array.isArray(data[key]) && data[key].length > 0) {
+                                models = data[key];
+                                apiPath = testUrl;
+                                break;
+                            }
+                        }
+                    }
+                    if (models.length > 0) break;
+                }
+            } catch (e) {
+                // 继续尝试下一个
+            }
+        }
+
+        // 如果没获取到，尝试从响应中提取模型信息
+        if (models.length === 0) {
+            addLog('⚠️ 未找到模型列表接口，尝试从生图响应中提取...', 'warn');
+            
+            // 发送一个最小请求，从响应中获取可用模型
+            try {
+                const testData = {
+                    input: 'test',
+                    model: 'nai-diffusion-5',
+                    action: 'generate',
+                    parameters: {
+                        width: 64,
+                        height: 64,
+                        scale: 1,
+                        sampler: 'k_euler',
+                        steps: 1,
+                        n_samples: 1,
+                        negative_prompt: 'test'
+                    }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData),
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.available_models && Array.isArray(data.available_models)) {
+                        models = data.available_models;
+                    } else if (data.models && Array.isArray(data.models)) {
+                        models = data.models;
+                    } else if (data.supported_models) {
+                        models = data.supported_models;
+                    }
+                }
+            } catch (e) {
+                // 忽略
+            }
+        }
+
+        // 如果还是没有获取到，使用默认模型列表
+        if (models.length === 0) {
+            addLog('⚠️ 无法获取模型列表，使用默认列表', 'warn');
+            models = [
+                'nai-diffusion-5-full',
+                'nai-diffusion-5',
+                'nai-diffusion-4-full',
+                'nai-diffusion-4',
+                'nai-diffusion-3',
+                'nai-diffusion-2',
+                'nai-diffusion'
+            ];
+        }
+
+        // 更新下拉框
+        modelSelect.innerHTML = '';
+        let selectedValue = '';
+        for (const m of models) {
+            const option = document.createElement('option');
+            // 处理不同格式的模型数据
+            let modelName = '';
+            let modelLabel = '';
+            if (typeof m === 'string') {
+                modelName = m;
+                modelLabel = m;
+            } else if (m.name) {
+                modelName = m.name;
+                modelLabel = m.label || m.name;
+            } else if (m.id) {
+                modelName = m.id;
+                modelLabel = m.name || m.id;
+            } else if (m.model) {
+                modelName = m.model;
+                modelLabel = m.label || m.model;
+            } else {
+                continue;
+            }
+            option.value = modelName;
+            option.textContent = modelLabel;
+            modelSelect.appendChild(option);
+            
+            // 默认选择第一个
+            if (!selectedValue) selectedValue = modelName;
+        }
+
+        // 如果有保存的模型配置，尝试恢复
+        try {
+            const savedConfig = localStorage.getItem('novelai_api_config');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                if (config.model) {
+                    modelSelect.value = config.model;
+                }
+            }
+        } catch (e) {}
+
+        modelSelect.disabled = false;
+        modelCount.textContent = `(${models.length} 个)`;
+        modelHint.textContent = `✅ 已加载 ${models.length} 个模型，来自: ${apiPath || 'API'}`;
+        addLog(`✅ 获取到 ${models.length} 个模型`, 'success');
+        showToast(`✅ 已加载 ${models.length} 个模型`, 'success');
+
+    } catch (error) {
+        modelSelect.innerHTML = '<option value="nai-diffusion-5-full">NAI Diffusion 5 Full</option><option value="nai-diffusion-5">NAI Diffusion 5</option><option value="nai-diffusion-4-full">NAI Diffusion 4 Full</option><option value="nai-diffusion-4">NAI Diffusion 4</option><option value="nai-diffusion-3">NAI Diffusion 3</option><option value="nai-diffusion-2">NAI Diffusion 2</option><option value="nai-diffusion">NAI Diffusion</option>';
+        modelSelect.disabled = false;
+        modelCount.textContent = '(使用默认)';
+        modelHint.textContent = '⚠️ 获取模型列表失败，使用默认列表';
+        addLog(`❌ 获取模型失败: ${error.message}`, 'error');
+        showToast(`⚠️ 获取模型失败，使用默认列表`, 'warn');
+    }
+}
+
+    // 获取模型按钮
+    document.getElementById('fetchModelsBtn').addEventListener('click', fetchAvailableModels);
+
+    // 当 API Key 或 URL 变化时，重新获取模型
+    apiKey.addEventListener('change', () => {
+        if (apiKey.value.trim() && apiUrl.value.trim()) {
+            setTimeout(fetchAvailableModels, 500);
+        }
+    });
+
+    apiUrl.addEventListener('change', () => {
+        if (apiKey.value.trim() && apiUrl.value.trim()) {
+            setTimeout(fetchAvailableModels, 500);
+        }
+    });
+    
+    </script>
+</body>
+</html>

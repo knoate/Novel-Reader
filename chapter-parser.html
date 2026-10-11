@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📥 导入章节</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            padding: 12px;
+        }
+        .parser-container {
+            max-width: 100%;
+        }
+
+        /* 上传区域 */
+        .upload-area {
+            background: #14142a;
+            border: 2px dashed #2a2a4a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 12px;
+        }
+        .upload-area:hover {
+            border-color: #ffd866;
+        }
+        .upload-area input[type="file"] {
+            display: none;
+        }
+        .upload-area .icon {
+            font-size: 28px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .upload-area .hint {
+            color: #666;
+            font-size: 13px;
+        }
+
+        /* 统计 */
+        .stats {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: #14142a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+        }
+        .stats .item {
+            font-size: 13px;
+        }
+        .stats .item .label {
+            color: #666;
+        }
+        .stats .item .value {
+            color: #ffd866;
+            font-weight: bold;
+        }
+
+        /* 控制栏 */
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .controls input {
+            flex: 1;
+            min-width: 120px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #2a2a4a;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        .controls input:focus {
+            outline: none;
+            border-color: #ffd866;
+        }
+        .controls button {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            background: #2a2a4a;
+            color: #c0c0d0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .controls button:hover {
+            background: #3a3a5a;
+        }
+        .controls .primary {
+            background: #ffd866;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+        .controls .primary:hover {
+            background: #ffe080;
+        }
+
+        /* 章节列表 */
+        .chapter-list {
+            max-height: 50vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .chapter-item {
+            background: #14142a;
+            border-radius: 6px;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #1a1a3a;
+            transition: all 0.2s;
+        }
+        .chapter-item:hover {
+            border-color: #2a2a4a;
+        }
+        .chapter-item .info {
+            flex: 1;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            min-width: 0;
+        }
+        .chapter-item .info .num {
+            color: #666;
+            font-size: 12px;
+            min-width: 30px;
+        }
+        .chapter-item .info .title {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .chapter-item .info .meta {
+            color: #666;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .chapter-item .actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .chapter-item .actions button {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chapter-item .actions .import-btn {
+            background: #ffd866;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+        .chapter-item .actions .import-btn:hover {
+            background: #ffe080;
+        }
+        .chapter-item .actions .preview-btn {
+            background: #2a2a4a;
+            color: #c0c0d0;
+        }
+        .chapter-item .actions .preview-btn:hover {
+            background: #3a3a5a;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px 20px;
+            color: #666;
+        }
+        .empty-state .icon {
+            font-size: 36px;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        /* 预览弹窗 */
+        .preview-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .preview-overlay.open {
+            display: flex;
+        }
+        .preview-box {
+            width: min(600px, 90vw);
+            max-height: 80vh;
+            background: #14142a;
+            border-radius: 10px;
+            border: 1px solid #2a2a4a;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .preview-box .preview-title {
+            color: #ffd866;
+            font-size: 18px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        .preview-box .preview-content {
+            white-space: pre-wrap;
+            line-height: 1.8;
+            font-size: 14px;
+            color: #d0d0e0;
+        }
+        .preview-box .close-preview {
+            margin-top: 12px;
+            padding: 6px 20px;
+            border: none;
+            border-radius: 6px;
+            background: #2a2a4a;
+            color: #c0c0d0;
+            cursor: pointer;
+        }
+        .preview-box .close-preview:hover {
+            background: #3a3a5a;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a3a;
+            color: #e0e0e0;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #2a2a4a;
+            font-size: 14px;
+            z-index: 200;
+            animation: fadeInUp 0.3s ease;
+            max-width: 90%;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0d0d1a; }
+        ::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="parser-container">
+        <!-- 上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <span class="icon">📄</span>
+            <div>点击选择 TXT 文件，或拖拽到此处</div>
+            <div class="hint">支持 UTF-8 / GBK 编码</div>
+            <input type="file" id="fileInput" accept=".txt">
+        </div>
+
+        <!-- 统计 -->
+        <div class="stats" id="stats">
+            <span class="item"><span class="label">总字数：</span><span class="value" id="totalChars">0</span></span>
+            <span class="item"><span class="label">章节数：</span><span class="value" id="totalChapters">0</span></span>
+            <span class="item"><span class="label">文件名：</span><span class="value" id="fileName" style="font-size:13px;">未加载</span></span>
+        </div>
+
+        <!-- 控制栏 -->
+        <div class="controls" id="controls" style="display:none;">
+            <input type="text" id="searchInput" placeholder="🔍 搜索章节...">
+            <button id="searchBtn">搜索</button>
+            <button class="primary" id="importAllBtn">📥 导入全部</button>
+        </div>
+
+        <!-- 章节列表 -->
+        <div class="chapter-list" id="chapterList">
+            <div class="empty-state">
+                <span class="icon">📚</span>
+                <div>请上传 TXT 文件解析章节</div>
+                <div style="font-size:13px;color:#555;margin-top:4px;">选择后点击「导入本章」即可添加到主阅读器</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 预览弹窗 -->
+    <div class="preview-overlay" id="previewOverlay">
+        <div class="preview-box">
+            <div class="preview-title" id="previewTitle">章节预览</div>
+            <div class="preview-content" id="previewContent"></div>
+            <button class="close-preview" id="closePreviewBtn">关闭预览</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        //  1. 章节解析（与主界面保持一致）
+        // ============================================================
+        function parseChapters(text) {
+            const lines = text.split(/\r?\n/);
+            const chapters = [];
+            let currentTitle = '前言';
+            let currentContent = '';
+
+            const patterns = [
+                /^第[零一二三四五六七八九十百千万0-9]+[章节回部集]/,
+                /^第[零一二三四五六七八九十百千万0-9]+卷/,
+                /^[卷部][零一二三四五六七八九十百千万0-9]+/,
+                /^Chapter\s*\d+/i,
+                /^【?第[零一二三四五六七八九十百千万0-9]+[章节回部集]】?/,
+                /^前言\s*$/,
+                /^楔子\s*$/,
+                /^序章\s*$/,
+                /^引子\s*$/,
+                /^终章\s*$/,
+                /^尾声\s*$/,
+                /^后记\s*$/,
+                /^番外\s*$/
+            ];
+
+            function isChapterTitle(line) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.length > 50) return false;
+                for (const pattern of patterns) {
+                    if (pattern.test(trimmed)) return true;
+                }
+                return false;
+            }
+
+            for (const line of lines) {
+                if (isChapterTitle(line)) {
+                    if (currentContent.trim()) {
+                        chapters.push({ title: currentTitle, content: currentContent.trim(), wordCount: currentContent.trim().length });
+                    }
+                    currentTitle = line.trim();
+                    currentContent = '';
+                } else {
+                    currentContent += line + '\n';
+                }
+            }
+            if (currentContent.trim()) {
+                chapters.push({ title: currentTitle, content: currentContent.trim(), wordCount: currentContent.trim().length });
+            }
+            if (chapters.length === 0 && text.trim()) {
+                chapters.push({ title: '全文', content: text.trim(), wordCount: text.trim().length });
+            }
+            return chapters;
+        }
+
+        // ============================================================
+        //  2. UI 逻辑
+        // ============================================================
+        let chapters = [];
+        let fileName = '';
+        let searchKeyword = '';
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const chapterList = document.getElementById('chapterList');
+        const totalChars = document.getElementById('totalChars');
+        const totalChapters = document.getElementById('totalChapters');
+        const fileNameEl = document.getElementById('fileName');
+        const controls = document.getElementById('controls');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const importAllBtn = document.getElementById('importAllBtn');
+        const previewOverlay = document.getElementById('previewOverlay');
+        const previewTitle = document.getElementById('previewTitle');
+        const previewContent = document.getElementById('previewContent');
+        const closePreviewBtn = document.getElementById('closePreviewBtn');
+
+        // Toast
+        function showToast(msg) {
+            const old = document.querySelector('.toast');
+            if (old) old.remove();
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 2000);
+        }
+
+        // 读取文件
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const text = e.target.result;
+                        if (text.includes('�') || /[\x80-\xFF]{4,}/.test(text)) {
+                            const blob = file.slice(0, file.size);
+                            const gbkReader = new FileReader();
+                            gbkReader.onload = function(e2) {
+                                try {
+                                    const decoder = new TextDecoder('gbk');
+                                    resolve(decoder.decode(e2.target.result));
+                                } catch (err) { reject(new Error('GBK解码失败：' + err.message)); }
+                            };
+                            gbkReader.onerror = function() { reject(new Error('GBK读取失败')); };
+                            gbkReader.readAsArrayBuffer(blob);
+                        } else {
+                            resolve(text);
+                        }
+                    } catch (err) { reject(new Error('读取失败：' + err.message)); }
+                };
+                reader.onerror = function() { reject(new Error('文件读取失败')); };
+                reader.readAsText(file);
+            });
+        }
+
+        // 渲染章节列表
+        function renderChapters() {
+            let list = chapters;
+            if (searchKeyword.trim()) {
+                const kw = searchKeyword.trim().toLowerCase();
+                list = chapters.filter(ch => ch.content.toLowerCase().includes(kw) || ch.title.toLowerCase().includes(kw));
+                if (list.length === 0) {
+                    chapterList.innerHTML = `<div class="empty-state"><span class="icon">🔍</span>没有找到匹配的章节</div>`;
+                    return;
+                }
+            }
+
+            if (list.length === 0) {
+                chapterList.innerHTML = `<div class="empty-state"><span class="icon">📭</span>暂无章节，请上传TXT文件</div>`;
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < list.length; i++) {
+                const ch = list[i];
+                const idx = chapters.indexOf(ch); // 原始索引
+                html += `
+                    <div class="chapter-item">
+                        <div class="info">
+                            <span class="num">${idx + 1}</span>
+                            <span class="title">${escapeHtml(ch.title)}</span>
+                            <span class="meta">${(ch.wordCount || ch.content.length).toLocaleString()} 字</span>
+                        </div>
+                        <div class="actions">
+                            <button class="preview-btn" data-index="${idx}">预览</button>
+                            <button class="import-btn" data-index="${idx}">导入本章</button>
+                        </div>
+                    </div>
+                `;
+            }
+            chapterList.innerHTML = html;
+
+            // 事件绑定
+            chapterList.querySelectorAll('.import-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    importChapter(idx);
+                });
+            });
+            chapterList.querySelectorAll('.preview-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    previewChapter(idx);
+                });
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 导入单章
+        function importChapter(index) {
+            if (index < 0 || index >= chapters.length) return;
+            const ch = chapters[index];
+            // 发送消息给主界面
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'importChapter',
+                    payload: { title: ch.title, content: ch.content, wordCount: ch.wordCount || ch.content.length }
+                }, '*');
+                showToast(`✅ 已导入「${ch.title}」`);
+            } else {
+                // 直接在主界面调用（调试用）
+                showToast('请在主界面中打开此页面');
+            }
+        }
+
+        // 导入全部
+        function importAll() {
+            if (!chapters || chapters.length === 0) { showToast('⚠️ 请先解析章节'); return; }
+            let count = 0;
+            for (const ch of chapters) {
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'importChapter',
+                        payload: { title: ch.title, content: ch.content, wordCount: ch.wordCount || ch.content.length }
+                    }, '*');
+                    count++;
+                }
+            }
+            showToast(`✅ 已导入全部 ${count} 章`);
+        }
+
+        // 预览章节
+        function previewChapter(index) {
+            if (index < 0 || index >= chapters.length) return;
+            const ch = chapters[index];
+            previewTitle.textContent = ch.title;
+            previewContent.textContent = ch.content;
+            previewOverlay.classList.add('open');
+        }
+
+        // 处理文件
+        async function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith('.txt')) {
+                showToast('⚠️ 请选择 TXT 文件');
+                return;
+            }
+            try {
+                const text = await readFile(file);
+                chapters = parseChapters(text);
+                fileName = file.name;
+                fileNameEl.textContent = file.name;
+                const total = chapters.reduce((sum, ch) => sum + (ch.wordCount || ch.content.length), 0);
+                totalChars.textContent = total.toLocaleString();
+                totalChapters.textContent = chapters.length.toLocaleString();
+                controls.style.display = 'flex';
+                searchInput.value = '';
+                searchKeyword = '';
+                renderChapters();
+                showToast(`✅ 解析完成，共 ${chapters.length} 章`);
+            } catch (err) {
+                showToast('❌ ' + err.message);
+                console.error(err);
+            }
+        }
+
+        // ============================================================
+        //  3. 事件绑定
+        // ============================================================
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#ffd866'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#2a2a4a'; });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#2a2a4a';
+            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+            fileInput.value = '';
+        });
+
+        searchBtn.addEventListener('click', () => {
+            searchKeyword = searchInput.value.trim();
+            renderChapters();
+        });
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') searchBtn.click();
+            if (e.key === 'Escape') { searchInput.value = ''; searchKeyword = ''; renderChapters(); }
+        });
+
+        importAllBtn.addEventListener('click', importAll);
+
+        closePreviewBtn.addEventListener('click', () => previewOverlay.classList.remove('open'));
+        previewOverlay.addEventListener('click', (e) => {
+            if (e.target === previewOverlay) previewOverlay.classList.remove('open');
+        });
+
+        // 暴露给主界面（用于调用）
+        window.__parser = { chapters, importChapter, importAll, renderChapters };
+
+        console.log('📥 章节解析器已加载，可通过主界面调用');
+    </script>
+</body>
+</html>
