@@ -128,6 +128,14 @@
             align-items: center;
             border: 1px solid #1a1a3a;
             transition: all 0.2s;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        @media (max-width: 600px) {
+            .chapter-item .info { flex-wrap: wrap; gap: 4px 8px; }
+            .chapter-item .info .title { font-size: 13px; max-width: 100%; }
+            .chapter-item .actions button { padding: 6px 10px; font-size: 12px; }
+            .chapter-list { max-height: 55vh; }
         }
         .chapter-item:hover {
             border-color: #2a2a4a;
