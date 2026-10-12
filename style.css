@@ -501,18 +501,23 @@ body {
     body.sidebar-open .sidebar-backdrop { display: block; }
 
     .main-header {
-        padding: 10px 12px;
+        padding: 6px 8px;
     }
-    .main-header .title-area h1 { font-size: 16px; }
-    .main-header .title-area .chapter-num { font-size: 12px; }
+    .main-header .title-area h1 { font-size: 14px; }
+    .main-header .title-area .chapter-num { font-size: 11px; }
 
     .main-header .actions {
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 4px;
     }
     .main-header .actions button {
-        padding: 6px 10px !important;
-        font-size: 12px !important;
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+    }
+    .main-header .actions input {
+        width: 40px !important;
+        padding: 3px 4px !important;
+        font-size: 11px !important;
     }
 
     #novelSelect {
@@ -525,14 +530,15 @@ body {
     }
 
     .content-area {
-        padding: 16px 14px !important;
+        padding: 10px 12px !important;
     }
     .chapter-content {
         font-size: 16px !important;
         line-height: 1.9 !important;
     }
     .chapter-title {
-        font-size: 20px !important;
+        font-size: 18px !important;
+        margin: 8px 0 !important;
     }
 
     .modal-content {

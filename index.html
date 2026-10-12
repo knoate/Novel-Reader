@@ -105,14 +105,17 @@
                     <button id="aiStopBtn" style="display:none;background:#f87171;color:white;border:1px solid #f87171;font-weight:bold;">⏹ 终止</button>
                     <input id="maxScenesInput" type="number" min="1" max="20" value="5" title="每章最多生成几张图" style="width:50px;padding:4px 6px;background:#2a2a4a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:5px;font-size:12px;text-align:center;">
                     <button id="currentEngineBtn" title="点击切换生图引擎" style="background:#14142a;color:#ffd866;border:1px solid #ffd866;font-size:12px;padding:4px 10px;border-radius:12px;cursor:pointer;">🎨 ComfyUI</button>
+                    <button id="toolsToggleBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">🛠️ ▾</button>
+                    <span id="secondaryTools" style="display:none;flex-wrap:wrap;gap:4px;width:100%;margin-top:4px;">
                     <button id="togglePromptsBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">👁️ 显示提示词</button>
-                    <span class="reader-toolbar" style="display:inline-flex;gap:4px;margin-left:8px;">
+                    <span class="reader-toolbar" style="display:inline-flex;gap:4px;">
                         <button id="fontDecBtn" title="缩小字号">A-</button>
                         <button id="fontIncBtn" title="放大字号">A+</button>
                         <button id="themeBtn" title="切换阅读主题">🌙 夜间</button>
                     </span>
                     <button id="aiIllustratorBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">🎨 配图工具</button>
                     <button onclick="location.href='/stats.html'" style="background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;">📊 统计</button>
+                    </span>
                     <button id="moreToolsBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">⚙️ 更多 ▾</button>
                     <span id="moreToolsGroup" style="display:none;flex-wrap:wrap;gap:6px;width:100%;margin-top:4px;">
                         <button id="comfyConfigBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">⚙️ ComfyUI配置</button>
@@ -905,11 +908,11 @@
                 const url = (engine === 'novelai' || engine === 'grok') ? (data.images && data.images[0]) || data.image?.url : data.image?.url;
                 if (!url) throw new Error('未返回图片');
 
-                // 替换 DOM 占位块为 <img>
-                const img = document.createElement('img');
-                img.src = url; img.alt = label; img.loading = 'lazy';
-                img.style.cssText = 'max-width:100%;border-radius:8px;border:1px solid #2a2a4a;margin:8px 0;';
-                box.replaceWith(img);
+                // 替换 DOM 占位块为图片 + 提示词说明
+                const wrap = document.createElement('div');
+                wrap.innerHTML = `<img src="${url}" alt="${escapeHtml(label)}" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid #2a2a4a;margin:8px 0;">
+<div class="prompt-text"><div>📝 场景：${escapeHtml(label)}</div><div>📌 提示词：${escapeHtml(prompt)}</div></div>`;
+                box.replaceWith(wrap);
 
                 // 同步回 ch.content，避免切章后回退成失败块
                 if (typeof chapters !== 'undefined' && currentIndex >= 0) {
@@ -920,7 +923,16 @@
                     if (pos !== -1) {
                         const start = ch.content.lastIndexOf('<div class="gen-fail"', pos);
                         const end = ch.content.indexOf('</div>', pos) + '</div>'.length;
-                        ch.content = ch.content.slice(0, start) + `![${label}](${url})` + ch.content.slice(end);
+                        // 同时清掉前后的 --- 分隔线
+                        let realStart = start;
+                        let realEnd = end;
+                        const before = ch.content.slice(0, start);
+                        const after = ch.content.slice(end);
+                        const m1 = before.match(/\n*---\n*$/);
+                        if (m1) realStart = start - m1[0].length;
+                        const m2 = after.match(/^\n*---\n*/);
+                        if (m2) realEnd = end + m2[0].length;
+                        ch.content = ch.content.slice(0, realStart) + `\n\n---\n![${label}](${url})\n<div class="prompt-text"><div>📝 场景：${escapeHtml(label)}</div><div>📌 提示词：${escapeHtml(prompt)}</div></div>\n---\n` + ch.content.slice(realEnd);
                         ch.wordCount = ch.content.length;
                     }
                 }
@@ -1030,6 +1042,13 @@
             const open = g.style.display !== 'none';
             g.style.display = open ? 'none' : 'flex';
             document.getElementById('moreToolsBtn').textContent = open ? '⚙️ 更多 ▾' : '⚙️ 更多 ▴';
+        });
+        // 折叠次要工具按钮
+        document.getElementById('toolsToggleBtn').addEventListener('click', () => {
+            const g = document.getElementById('secondaryTools');
+            const open = g.style.display !== 'none';
+            g.style.display = open ? 'none' : 'flex';
+            document.getElementById('toolsToggleBtn').textContent = open ? '🛠️ ▾' : '🛠️ ▴';
         });
 
         prevBtn.addEventListener('click', () => {
