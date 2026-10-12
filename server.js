@@ -366,6 +366,7 @@ async function generateGrokImage(opts = {}) {
     }
     const key = apiKey || process.env.GROK_API_KEY;
     if (!key) throw new Error('未配置 Grok/Banana API Key');
+    if (!model) throw new Error('未选择 Grok 模型，请在配图工具页选择模型');
 
     let resp;
     try {

@@ -663,44 +663,21 @@
         // ============================================================
 
         function updateConfigStatus() {
-            const config = loadApiConfig();
-            const engine = engineSelect.value;
-
-            if (!config) {
-                statusDot.className = 'dot dot-red';
-                statusText.textContent = '⚠️ 未配置 API';
-                return;
+            try {
+                const config = loadApiConfig();
+                const engine = engineSelect.value;
+                if (!config) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 未配置 API'; return; }
+                const hasLlm = config.llm?.apiKey;
+                if (!hasLlm) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 LLM API'; return; }
+                if (engine === 'novelai' && !config.novelai?.apiKey) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 NovelAI API'; return; }
+                const grokKeyEl = document.getElementById('grokKey');
+                if (engine === 'grok' && grokKeyEl && !grokKeyEl.value.trim()) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 Grok API Key'; return; }
+                if (engine === 'comfyui' && !config.comfyui?.url) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 ComfyUI URL'; return; }
+                statusDot.className='dot dot-green'; statusText.textContent=`✅ 已就绪 (${getEngineLabel(engine)})`;
+            } catch (e) {
+                console.error('状态检测错误:', e);
+                statusDot.className='dot dot-red'; statusText.textContent='⚠️ 状态检测失败';
             }
-
-            const hasLlm = config.llm?.apiKey;
-            const hasEngine = engine === 'novelai' ? config.novelai?.apiKey : true;
-
-            if (!hasLlm) {
-                statusDot.className = 'dot dot-red';
-                statusText.textContent = '⚠️ 请配置 LLM API';
-                return;
-            }
-
-            if (engine === 'novelai' && !hasEngine) {
-                statusDot.className = 'dot dot-red';
-                statusText.textContent = '⚠️ 请配置 NovelAI API';
-                return;
-            }
-
-            if (engine === 'grok' && !grokKey.value.trim()) {
-                statusDot.className = 'dot dot-red';
-                statusText.textContent = '⚠️ 请配置 Grok API Key';
-                return;
-            }
-
-            if (engine === 'comfyui' && !config.comfyui?.url) {
-                statusDot.className = 'dot dot-red';
-                statusText.textContent = '⚠️ 请配置 ComfyUI URL';
-                return;
-            }
-
-            statusDot.className = 'dot dot-green';
-            statusText.textContent = `✅ 已就绪 (${getEngineLabel(engine)})`;
         }
 
         // ============================================================
