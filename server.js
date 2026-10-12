@@ -561,9 +561,9 @@ app.post('/api/analyze', async (req, res) => {
 // ---- ComfyUI 生图 ----
 app.post('/api/generate', async (req, res) => {
     try {
-        const { prompt, negative_prompt, workflowConfig, promptTemplate, negativeTemplate } = req.body;
+        const { prompt, negative_prompt, workflowConfig, promptTemplate, negativeTemplate, comfyUrl } = req.body;
         if (!prompt) return res.status(400).json({ error: '缺少绘图提示词' });
-        const img = await generateComfyImage(prompt, negative_prompt, workflowConfig, { promptTemplate, negativeTemplate });
+        const img = await generateComfyImage(prompt, negative_prompt, workflowConfig, { promptTemplate, negativeTemplate }, comfyUrl);
         res.json({ success: true, image: img });
     } catch (e) {
         console.error('ComfyUI 生图失败:', e.message);
@@ -714,7 +714,7 @@ app.post('/api/analyze-and-generate', async (req, res) => {
                     });
                     image = r.url;
                 } else {
-                    const r = await generateComfyImage(wrapped, scene.negative_prompt || '', workflowConfig, { promptTemplate, negativeTemplate });
+                    const r = await generateComfyImage(wrapped, scene.negative_prompt || '', workflowConfig, { promptTemplate, negativeTemplate }, req.body.comfyUrl);
                     image = r.url; seed = r.seed;
                 }
                 // 自动入库

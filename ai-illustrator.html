@@ -546,6 +546,11 @@
     </div>
 
     <script>
+        window.addEventListener('error', (e) => {
+            const el = document.getElementById('statusText');
+            if (el) el.textContent = '⚠️ JS错误: ' + e.message.slice(0,60);
+            console.error('❌ JS错误:', e.message, e.lineno, e.filename);
+        });
         // ============================================================
         //  0. 配置与 API 地址
         // ============================================================
@@ -667,7 +672,7 @@
                 const config = loadApiConfig();
                 const engine = engineSelect.value;
                 if (!config) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 未配置 API'; return; }
-                const hasLlm = config.llm?.apiKey;
+                const hasLlm = config.llm?.apiKey || config.llmApiKey;
                 if (!hasLlm) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 LLM API'; return; }
                 if (engine === 'novelai' && !config.novelai?.apiKey) { statusDot.className='dot dot-red'; statusText.textContent='⚠️ 请配置 NovelAI API'; return; }
                 const grokKeyEl = document.getElementById('grokKey');
@@ -737,7 +742,7 @@
 
             // 检查配置
             const config = loadApiConfig();
-            if (!config?.llm?.apiKey) {
+            if (!config?.llm?.apiKey && !config?.llmApiKey) {
                 showToast('⚠️ 请先在 API 配置中心配置 LLM API Key', 'error');
                 return;
             }
@@ -1048,15 +1053,18 @@
 
         function syncGrokVisibility() {
             const v = engineSelect.value;
-            grokCard.style.display = v === 'grok' ? '' : 'none';
-            document.getElementById('comfyConfigCard').style.display = v === 'comfyui' ? '' : 'none';
-            document.getElementById('novelaiConfigCard').style.display = v === 'novelai' ? '' : 'none';
+            if (grokCard) grokCard.style.display = v === 'grok' ? '' : 'none';
+            const cc = document.getElementById('comfyConfigCard');
+            if (cc) cc.style.display = v === 'comfyui' ? '' : 'none';
+            const nc = document.getElementById('novelaiConfigCard');
+            if (nc) nc.style.display = v === 'novelai' ? '' : 'none';
         }
         engineSelect.addEventListener('change', syncGrokVisibility);
         syncGrokVisibility();
 
         // Grok 测试生图
-        document.getElementById('grokTestBtn').addEventListener('click', async () => {
+        const _grokTestBtn = document.getElementById('grokTestBtn');
+        if (_grokTestBtn) _grokTestBtn.addEventListener('click', async () => {
             const btn = document.getElementById('grokTestBtn');
             const result = document.getElementById('grokTestResult');
             const prompt = applyReplaceRules(document.getElementById('grokTestPrompt').value.trim() || 'a cute cat sitting on a windowsill, sunny day, anime style');
@@ -1086,7 +1094,8 @@
             }
         });
 
-        document.getElementById('comfyTestBtn').addEventListener('click', async () => {
+        const _comfyTestBtn = document.getElementById('comfyTestBtn');
+        if (_comfyTestBtn) _comfyTestBtn.addEventListener('click', async () => {
             const btn = document.getElementById('comfyTestBtn');
             const result = document.getElementById('comfyTestResult');
             btn.disabled = true;
@@ -1117,7 +1126,8 @@
         });
 
         // 从 API 地址拉取模型列表
-        document.getElementById('grokFetchModelsBtn').addEventListener('click', async () => {
+        const _grokFetchBtn = document.getElementById('grokFetchModelsBtn');
+        if (_grokFetchBtn) _grokFetchBtn.addEventListener('click', async () => {
             const btn = document.getElementById('grokFetchModelsBtn');
             const base = (grokUrl.value.trim() || 'https://api.x.ai/v1').replace(/\/$/, '');
             // 把 /images/generations、/chat/completions 替换成 /models
@@ -1293,6 +1303,8 @@
         updateCharCount();
         updateConfigStatus();
         loadGallery();
+        setTimeout(updateConfigStatus, 500);
+        setTimeout(updateConfigStatus, 2000);
 
         console.log('🎨 AI 自动配图工具已加载');
         console.log('📡 API 地址:', API_BASE);

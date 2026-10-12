@@ -944,8 +944,9 @@
                     const pos = ch.content.indexOf(anchor);
                     if (pos !== -1) {
                         const start = ch.content.lastIndexOf('<div class="gen-fail"', pos);
-                        const end = ch.content.indexOf('</div>', pos) + '</div>'.length;
-                        // 同时清掉前后的 --- 分隔线
+                        // 找到 gen-fail 块的结尾：按钮后的 </div>
+                        const btnPos = ch.content.indexOf('</button>', pos);
+                        const end = btnPos !== -1 ? ch.content.indexOf('</div>', btnPos) + '</div>'.length : ch.content.indexOf('</div>', pos) + '</div>'.length;
                         let realStart = start;
                         let realEnd = end;
                         const before = ch.content.slice(0, start);
