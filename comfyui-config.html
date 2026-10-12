@@ -380,6 +380,7 @@
                 📝 工作流详情
                 <span class="badge" id="currentWorkflowName">未选择</span>
                 <span class="save-status" id="saveStatus3">✅ 已保存</span>
+                <button class="btn btn-success btn-sm" id="saveWorkflowBtn2" style="margin-left:auto;">💾 保存</button>
             </div>
 
             <div class="form-row">
@@ -472,6 +473,10 @@
                 <span class="save-status" id="saveStatus4">✅ 已保存</span>
             </div>
             <div class="btn-group">
+                <div style="width:100%;margin-bottom:10px;">
+                    <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">测试提示词</label>
+                    <textarea id="quickTestPrompt" rows="2" placeholder="a beautiful landscape, mountains, sunset, anime style" style="width:100%;padding:8px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+                </div>
                 <button class="btn btn-primary" id="quickTestBtn">🖼️ 快速测试生图</button>
                 <button class="btn btn-secondary" id="resetConfigBtn">🔄 重置配置</button>
                 <button class="btn btn-secondary" id="exportConfigBtn">📤 导出配置</button>
@@ -626,6 +631,7 @@
                         </span>
                         <div class="actions">
                             <button class="btn btn-sm btn-secondary select-workflow" data-index="${i}">选择</button>
+                            <button class="btn btn-sm btn-secondary rename-workflow" data-index="${i}">✏️ 重命名</button>
                             <button class="btn btn-sm btn-secondary set-default" data-index="${i}">设为默认</button>
                         </div>
                     </div>
@@ -646,6 +652,12 @@
                     setDefaultWorkflow(idx);
                 });
             });
+            workflowList.querySelectorAll('.rename-workflow').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    renameWorkflow(idx);
+                });
+            });
 
             // 如果有选中的，更新详情
             if (currentWorkflowIndex >= 0 && currentWorkflowIndex < workflows.length) {
@@ -655,6 +667,13 @@
 
         function selectWorkflow(index) {
             if (index < 0 || index >= workflows.length) return;
+            // 切换前自动保存当前表单
+            if (currentWorkflowIndex >= 0 && currentWorkflowIndex < workflows.length) {
+                try {
+                    const data = getFormWorkflow();
+                    workflows[currentWorkflowIndex] = { ...workflows[currentWorkflowIndex], ...data };
+                } catch (e) {}
+            }
             currentWorkflowIndex = index;
             loadWorkflowToForm(index);
             renderWorkflows();
@@ -667,6 +686,15 @@
             renderWorkflows();
             saveConfig('⭐ 已设为默认');
             showToast(`已设为默认：${workflows[index].name || '未命名'}`);
+        }
+
+        function renameWorkflow(index) {
+            if (index < 0 || index >= workflows.length) return;
+            const name = prompt('输入工作流名称：', workflows[index].name || '');
+            if (!name) return;
+            workflows[index].name = name.trim();
+            renderWorkflows();
+            saveConfig('✅ 已重命名');
         }
 
         function loadWorkflowToForm(index) {
@@ -888,52 +916,18 @@
             const url = comfyUrl.value.trim();
             if (!url) return showToast('⚠️ 请先配置 ComfyUI URL');
 
-            const testPrompt = 'a beautiful landscape, mountains, sunset, digital art, high quality';
+            const testPrompt = document.getElementById('quickTestPrompt').value.trim() || 'a beautiful landscape, mountains, sunset, digital art, high quality';
             showToast('🎨 正在测试生图...', 'info');
 
             try {
-                // 简单测试：使用默认工作流或创建一个简单的工作流
-                const workflow = {
-                    "3": {
-                        "class_type": "KSampler",
-                        "inputs": {
-                            "seed": Math.floor(Math.random() * 1000000000),
-                            "steps": 10,
-                            "cfg": 7,
-                            "sampler_name": "euler",
-                            "scheduler": "normal",
-                            "denoise": 1,
-                            "model": ["4", 0],
-                            "positive": ["6", 0],
-                            "negative": ["7", 0],
-                            "latent_image": ["5", 0]
-                        }
-                    },
-                    "4": {
-                        "class_type": "CheckpointLoaderSimple",
-                        "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" }
-                    },
-                    "5": {
-                        "class_type": "EmptyLatentImage",
-                        "inputs": { "width": 512, "height": 512, "batch_size": 1 }
-                    },
-                    "6": {
-                        "class_type": "CLIPTextEncode",
-                        "inputs": { "text": testPrompt, "clip": ["4", 1] }
-                    },
-                    "7": {
-                        "class_type": "CLIPTextEncode",
-                        "inputs": { "text": "worst quality, blurry", "clip": ["4", 1] }
-                    },
-                    "8": {
-                        "class_type": "VAEDecode",
-                        "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
-                    },
-                    "9": {
-                        "class_type": "SaveImage",
-                        "inputs": { "filename_prefix": "test", "images": ["8", 0] }
-                    }
-                };
+                // 用用户配置的工作流，没有则报错
+                if (currentWorkflowIndex < 0 || !workflows[currentWorkflowIndex]) {
+                    throw new Error('请先选择一个工作流');
+                }
+                const wf = workflows[currentWorkflowIndex];
+                if (!wf.workflowJson) throw new Error('当前工作流没有 JSON，请先导入');
+                console.log('🔧 使用工作流:', wf.name || '未命名', '节点数:', Object.keys(JSON.parse(wf.workflowJson)).length);
+                const workflow = JSON.parse(wf.workflowJson);
 
                 const submitRes = await fetch(`${url}/prompt`, {
                     method: 'POST',
@@ -941,7 +935,21 @@
                     body: JSON.stringify({ prompt: workflow })
                 });
 
-                if (!submitRes.ok) throw new Error(`提交失败: ${submitRes.status}`);
+                if (!submitRes.ok) {
+                    const errBody = await submitRes.text();
+                    console.error('❌ ComfyUI 返回错误:', submitRes.status, errBody);
+                    let msg = errBody.slice(0, 300);
+                    try {
+                        const e = JSON.parse(errBody);
+                        if (e.node_errors) {
+                            const nodes = Object.entries(e.node_errors).map(([id, errs]) =>
+                                `节点${id}: ${errs.errors?.map(x => x.message || x.type).join(', ')}`
+                            ).join('; ');
+                            msg = nodes;
+                        }
+                    } catch (e2) {}
+                    throw new Error(`提交失败: ${submitRes.status} — ${msg}`);
+                }
                 const submitData = await submitRes.json();
                 const promptId = submitData.prompt_id;
 
@@ -994,6 +1002,8 @@
         document.getElementById('deleteWorkflowBtn').addEventListener('click', deleteWorkflow);
         document.getElementById('copyWorkflowBtn').addEventListener('click', copyWorkflow);
         document.getElementById('saveWorkflowBtn').addEventListener('click', saveWorkflow);
+        const sw2 = document.getElementById('saveWorkflowBtn2');
+        if (sw2) sw2.addEventListener('click', saveWorkflow);
 
         // 测试连接
         document.getElementById('testWorkflowBtn').addEventListener('click', checkComfyStatus);

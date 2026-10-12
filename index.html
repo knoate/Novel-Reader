@@ -385,11 +385,31 @@
         }
         function selectChapter(index) {
             if (index < 0 || index >= chapters.length) return;
+            accumulateReadTime();
             currentIndex = index;
+            chapterOpenTime = Date.now();
             renderContent();
             contentArea.scrollTop = 0;
             saveProgress();
         }
+
+        // 阅读时长统计
+        let chapterOpenTime = Date.now();
+        function accumulateReadTime() {
+            if (!chapterOpenTime) return;
+            const dt = Math.floor((Date.now() - chapterOpenTime) / 1000);
+            if (dt < 5) return; // 少于5秒不算
+            const key = 'novel_reader_time_' + (currentNovelId || 'default');
+            let data = {};
+            try { data = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+            const today = new Date().toISOString().slice(0, 10);
+            data[today] = (data[today] || 0) + dt;
+            data.total = (data.total || 0) + dt;
+            localStorage.setItem(key, JSON.stringify(data));
+            chapterOpenTime = Date.now();
+        }
+        setInterval(accumulateReadTime, 30000);
+        window.addEventListener('beforeunload', accumulateReadTime);
 
         // 滚动到底部自动标记已读
         contentArea.addEventListener('scroll', () => {
@@ -602,10 +622,12 @@
             }
 
             let workflowConfig = null;
+            let comfyUrl = null;
             if (engine === 'comfyui') {
                 const comfyui = loadComfyuiConfig();
                 if (comfyui && comfyui.workflowConfig) {
                     workflowConfig = comfyui.workflowConfig;
+                    comfyUrl = comfyui.comfyUrl;
                 }
             }
 
@@ -727,7 +749,7 @@
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 prompt: scene.prompt, negative_prompt: scene.negative_prompt || '',
-                                engine, workflowConfig, scene: sceneLabel, anchor: scene.anchor || '',
+                                engine, workflowConfig, comfyUrl, scene: sceneLabel, anchor: scene.anchor || '',
                                 ...requestBody, novelId: currentNovelId
                             }),
                             signal: aiAbortController.signal
@@ -878,10 +900,10 @@
             try {
                 const config = loadApiConfig() || {};
                 const engine = config.defaultEngine || 'comfyui';
-                let workflowConfig = null;
+                let workflowConfig = null, comfyUrl = null;
                 if (engine === 'comfyui') {
                     const c = loadComfyuiConfig();
-                    if (c && c.workflowConfig) workflowConfig = c.workflowConfig;
+                    if (c && c.workflowConfig) { workflowConfig = c.workflowConfig; comfyUrl = c.comfyUrl; }
                 }
                 let endpoint, body;
                 if (engine === 'novelai') {
@@ -897,7 +919,7 @@
                     body = { prompt, apiUrl: grok.apiUrl, apiKey: grok.apiKey, grokModel: grok.model, width: w, height: h, promptPrefix: fp.prefix || '', promptSuffix: fp.suffix || '' };
                 } else {
                     endpoint = '/api/generate';
-                    body = { prompt, workflowConfig };
+                    body = { prompt, workflowConfig, comfyUrl };
                 }
                 const r = await fetch(`${API_BASE}${endpoint}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },

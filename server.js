@@ -252,35 +252,45 @@ function buildComfyWorkflow(prompt, negativePrompt = '', config) {
     };
 }
 
-async function downloadComfyImage(image) {
-    const url = `${COMFYUI_URL}/view?filename=${encodeURIComponent(image.filename)}&type=${image.type || 'output'}&subfolder=${encodeURIComponent(image.subfolder || '')}`;
-    const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+async function downloadComfyImage(image, base) {
+    const b = (base || COMFYUI_URL).replace(/\/$/, '');
+    const url = `${b}/view?filename=${encodeURIComponent(image.filename)}&type=${image.type || 'output'}&subfolder=${encodeURIComponent(image.subfolder || '')}`;
+    console.log('⬇️ 下载图片:', url);
+    const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
     const ext = (image.filename.split('.').pop() || 'png').toLowerCase();
     const localName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const localPath = path.join('images', 'comfy', localName);
     fs.writeFileSync(localPath, Buffer.from(resp.data));
+    console.log('✅ 已保存到:', localPath, resp.data.length, 'bytes');
     return `/images/comfy/${localName}`;
 }
 
-async function generateComfyImage(prompt, negativePrompt, workflowConfig, templates) {
+async function generateComfyImage(prompt, negativePrompt, workflowConfig, templates, comfyUrl) {
     workflowConfig = workflowConfig || {};
     templates = templates || {};
+    const base = (comfyUrl || COMFYUI_URL).replace(/\/$/, '');
     return enqueueComfy(async () => {
         // 应用提示词模板：{prompt} -> LLM 生成的场景提示词
         const finalPrompt = renderTemplate(templates.promptTemplate, { prompt, __fallback: prompt });
         const finalNeg = renderTemplate(templates.negativeTemplate, { prompt, __fallback: negativePrompt });
         const { workflow, seed } = buildComfyWorkflow(finalPrompt, finalNeg, workflowConfig);
-        const submit = await axios.post(`${COMFYUI_URL}/prompt`, { prompt: workflow }, { timeout: 30000 });
+        const submit = await axios.post(`${base}/prompt`, { prompt: workflow }, { timeout: 30000 });
         const promptId = submit.data.prompt_id;
         if (!promptId) throw new Error('ComfyUI 未返回 prompt_id');
 
         // 轮询结果
         const start = Date.now();
-        while (Date.now() - start < 120000) {
-            await new Promise(r => setTimeout(r, 1000));
-            const hist = (await axios.get(`${COMFYUI_URL}/history/${promptId}`, { timeout: 10000 })).data;
+        let pollCount = 0;
+        while (Date.now() - start < 300000) {
+            await new Promise(r => setTimeout(r, 2000));
+            pollCount++;
+            const histRes = await axios.get(`${base}/history/${promptId}`, { timeout: 15000 });
+            const hist = histRes.data;
             const entry = hist[promptId];
-            if (!entry) continue;
+            if (!entry) {
+                if (pollCount % 15 === 0) console.log(`⏳ 等待生成... ${((Date.now()-start)/1000)|0}s, history为空`);
+                continue;
+            }
             if (entry.status && entry.status.status_str === 'error') {
                 const msgs = entry.status.messages || [];
                 throw new Error('ComfyUI 工作流执行失败: ' + JSON.stringify(msgs).slice(0, 300));
@@ -289,10 +299,12 @@ async function generateComfyImage(prompt, negativePrompt, workflowConfig, templa
             for (const nodeId in outputs) {
                 const imgs = outputs[nodeId].images;
                 if (imgs && imgs.length) {
-                    const localUrl = await downloadComfyImage(imgs[0]);
+                    console.log(`✅ 拿到图片:`, imgs[0]);
+                    const localUrl = await downloadComfyImage(imgs[0], base);
                     return { url: localUrl, seed, filename: imgs[0].filename };
                 }
             }
+            if (pollCount % 15 === 0) console.log(`⏳ 等待生成... ${((Date.now()-start)/1000)|0}s, outputs:`, Object.keys(outputs));
         }
         throw new Error('ComfyUI 生成超时（120s），工作流可能过复杂或队列堵塞');
     });
@@ -619,7 +631,7 @@ app.post('/api/analyze-only', async (req, res) => {
 // ---- 单场景生图（前端逐张调用，可显示进度）----
 app.post('/api/generate-scene', async (req, res) => {
     let aborted = false;
-    req.on('close', () => { aborted = true; });
+    res.on('close', () => { if (!res.writableEnded) aborted = true; });
     try {
         const { prompt, negative_prompt, engine = 'comfyui', workflowConfig } = req.body;
         const pre = req.body.promptPrefix || '';
@@ -640,7 +652,7 @@ app.post('/api/generate-scene', async (req, res) => {
             });
             image = r.url;
         } else {
-            const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {});
+            const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {}, req.body.comfyUrl);
             image = r.url; seed = r.seed;
         }
         if (aborted) { console.log('⏹ 客户端已断开，跳过响应'); return; }

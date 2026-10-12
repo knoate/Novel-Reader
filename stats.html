@@ -40,6 +40,10 @@ canvas { width:100%; height:200px; background:#1e1e3a; border-radius:10px; margi
     <div class="card orange"><div class="num" id="cAvg">0</div><div class="label">日均张数</div></div>
     <div class="card red"><div class="num" id="cFail">0</div><div class="label">失败次数</div></div>
 </div>
+<div class="card" style="padding:12px;margin-bottom:16px;display:flex;justify-content:space-around;align-items:center;">
+    <div style="text-align:center;"><div style="font-size:22px;font-weight:bold;color:#4ade80;" id="cReadTime">0分钟</div><div style="font-size:12px;color:#888;margin-top:4px;">累计阅读时长</div></div>
+    <div style="text-align:center;"><div style="font-size:22px;font-weight:bold;color:#60a5fa;" id="cReadToday">0分钟</div><div style="font-size:12px;color:#888;margin-top:4px;">今日阅读</div></div>
+</div>
 <div class="range-btns">
     <button data-range="day" class="active">日</button>
     <button data-range="week">周</button>
@@ -54,10 +58,31 @@ canvas { width:100%; height:200px; background:#1e1e3a; border-radius:10px; margi
 <p style="margin-top:12px;font-size:12px;color:#666;">💡 每次生图成功/失败自动记录，永久保存。</p>
 <script>
 let log = [], range = 'day';
+function fmtTime(sec) {
+    if (sec < 60) return sec + '秒';
+    if (sec < 3600) return Math.round(sec/60) + '分钟';
+    return (sec/3600).toFixed(1) + '小时';
+}
+function loadReadTime() {
+    let total = 0, today = 0;
+    const todayStr = new Date().toISOString().slice(0,10);
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith('novel_reader_time_')) continue;
+        try {
+            const d = JSON.parse(localStorage.getItem(k));
+            total += d.total || 0;
+            today += d[todayStr] || 0;
+        } catch (e) {}
+    }
+    document.getElementById('cReadTime').textContent = fmtTime(total);
+    document.getElementById('cReadToday').textContent = fmtTime(today);
+}
 async function load() {
     const r = await fetch('/api/stats');
     const d = await r.json();
     log = d.log || [];
+    loadReadTime();
     render();
 }
 async function resetStats() {

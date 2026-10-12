@@ -480,6 +480,30 @@
             </div>
         </div>
 
+        <!-- ComfyUI 配置 -->
+        <div class="card" id="comfyConfigCard">
+            <div class="card-title">🖥️ ComfyUI 配置</div>
+            <p style="font-size:13px;color:#888;margin-bottom:12px;">完整的 ComfyUI 工作流管理、节点映射、测试生图等功能，请在独立配置页中操作。</p>
+            <button onclick="location.href='/comfyui-config.html'" style="padding:8px 20px;background:#7c3aed;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">⚙️ 打开 ComfyUI 完整配置</button>
+        </div>
+
+        <!-- NovelAI 配置 -->
+        <div class="card" id="novelaiConfigCard" style="display:none;">
+            <div class="card-title">🎨 NovelAI 配置</div>
+            <div class="tpl-field">
+                <label>API 地址</label>
+                <input type="text" id="naiUrl" placeholder="https://dangao.iisbo.com/api/v1/novelai" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+            </div>
+            <div class="tpl-field">
+                <label>API Key</label>
+                <input type="password" id="naiKey" placeholder="..." style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+            </div>
+            <div class="tpl-field">
+                <label>模型</label>
+                <input type="text" id="naiModel" placeholder="novelai" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+            </div>
+        </div>
+
         <!-- 操作 -->
         <div class="card">
             <div class="progress-area">
@@ -1046,7 +1070,10 @@
         }
 
         function syncGrokVisibility() {
-            grokCard.style.display = engineSelect.value === 'grok' ? '' : 'none';
+            const v = engineSelect.value;
+            grokCard.style.display = v === 'grok' ? '' : 'none';
+            document.getElementById('comfyConfigCard').style.display = v === 'comfyui' ? '' : 'none';
+            document.getElementById('novelaiConfigCard').style.display = v === 'novelai' ? '' : 'none';
         }
         engineSelect.addEventListener('change', syncGrokVisibility);
         syncGrokVisibility();
@@ -1079,6 +1106,36 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = oldText;
+            }
+        });
+
+        document.getElementById('comfyTestBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('comfyTestBtn');
+            const result = document.getElementById('comfyTestResult');
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成中...';
+            result.textContent = '';
+            try {
+                const workflow = document.getElementById('comfyWorkflow').value.trim();
+                if (!workflow) throw new Error('请先粘贴工作流 JSON');
+                const r = await fetch(`${API_BASE}/api/generate`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: document.getElementById('comfyTestPrompt').value.trim() || 'a cute cat sitting on a windowsill, sunny day, anime style',
+                        workflowConfig: JSON.parse(workflow),
+                        promptPrefix: fixedPrefixEl.value.trim(),
+                        promptSuffix: fixedSuffixEl.value.trim()
+                    })
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.error || '生成失败');
+                result.innerHTML = `✅ 成功 <img src="${data.image?.url}" style="max-height:80px;border-radius:4px;vertical-align:middle;margin-left:6px;">`;
+            } catch (e) {
+                result.textContent = '❌ ' + e.message;
+                result.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🧪 测试生图';
             }
         });
 
