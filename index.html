@@ -438,13 +438,13 @@
         function openImportModal() {
             modalTitle.textContent = '📥 导入小说';
             importModal.classList.add('open');
+            modalBody.innerHTML = `
+                <iframe src="chapter-parser.html" style="width:100%;height:70vh;border:none;border-radius:6px;background:#0f0f1a;"></iframe>
+                <div style="margin-top:12px;text-align:center;color:#666;font-size:13px;">
+                    在解析器中选择章节，点击「导入本章」即可添加到阅读器
+                </div>
+            `;
             if (!parserLoaded) {
-                modalBody.innerHTML = `
-                    <iframe src="chapter-parser.html" style="width:100%;height:70vh;border:none;border-radius:6px;background:#0f0f1a;"></iframe>
-                    <div style="margin-top:12px;text-align:center;color:#666;font-size:13px;">
-                        在解析器中选择章节，点击「导入本章」即可添加到阅读器
-                    </div>
-                `;
                 parserLoaded = true;
                 window.addEventListener('message', async (event) => {
                     if (!event.data || event.data.type !== 'importChapter') return;
