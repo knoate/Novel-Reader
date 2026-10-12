@@ -44,8 +44,10 @@ for (const d of DIRS) {
 //  2. 本地持久化（章节 + 插图库）
 // ============================================================
 const DATA_DIR = path.join(__dirname, 'data');
+const NOVELS_FILE = path.join(DATA_DIR, 'novels.json');
 const CHAPTERS_FILE = path.join(DATA_DIR, 'chapters.json');
 const ILLUS_FILE = path.join(DATA_DIR, 'illustrations.json');
+const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 
 function loadJson(file, fallback) {
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -54,9 +56,35 @@ function loadJson(file, fallback) {
 function saveJson(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
+let novels = loadJson(NOVELS_FILE, []);
 let chapters = loadJson(CHAPTERS_FILE, []);
 let illustrations = loadJson(ILLUS_FILE, []);
+let statsLog = loadJson(STATS_FILE, []);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+function logStat(engine, success) {
+    try {
+        statsLog.push({
+            t: Date.now(),
+            engine: engine || 'unknown',
+            success: !!success
+        });
+        // 只保留最近 2 万条
+        if (statsLog.length > 20000) statsLog = statsLog.slice(-20000);
+        saveJson(STATS_FILE, statsLog);
+    } catch (e) {}
+}
+
+// 首次启动：把已有数据归入默认小说
+if (!novels.length) {
+    const defaultId = uid();
+    novels = [{ id: defaultId, name: '我的小说', createdAt: new Date().toISOString() }];
+    chapters = chapters.map(c => ({ ...c, novelId: c.novelId || defaultId }));
+    illustrations = illustrations.map(i => ({ ...i, novelId: i.novelId || defaultId }));
+    saveJson(NOVELS_FILE, novels);
+    saveJson(CHAPTERS_FILE, chapters);
+    saveJson(ILLUS_FILE, illustrations);
+}
 
 // ============================================================
 //  3. LLM 分析（分段 + 稳健 JSON 提取）
@@ -90,7 +118,7 @@ function extractScenesJson(text) {
     return JSON.parse(m ? m[0] : candidate);
 }
 
-async function callLlm(prompt, model) {
+async function callLlm(prompt, model, signal) {
     const useModel = model || process.env.LLM_MODEL || 'gpt-4';
     const res = await axios.post(LLM_API_URL, {
         model: useModel,
@@ -98,7 +126,8 @@ async function callLlm(prompt, model) {
         temperature: 0.7,
     }, {
         headers: { 'Authorization': `Bearer ${LLM_API_KEY}`, 'Content-Type': 'application/json' },
-        timeout: 60000
+        timeout: 60000,
+        signal
     });
     return res.data.choices[0].message.content;
 }
@@ -112,7 +141,7 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 只输出 JSON 数组，不要任何解释：
 [{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文定位句"}]`;
 
-async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5) {
+async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal) {
     if (!LLM_API_KEY) {
         return [
             { scene: '主角站在山巅眺望远方', prompt: 'A lone figure standing on a mountain peak, overlooking a vast fantasy landscape, dramatic sunset lighting, epic scale, digital art, high quality', anchor: '主角站在山巅，目光投向远方' },
@@ -125,7 +154,7 @@ async function analyzeChapters(title, content, model, instruction = '', maxScene
     const allScenes = [];
     for (let i = 0; i < chunks.length; i++) {
         try {
-            const text = await callLlm(`${ANALYZE_SYSTEM}${sysExtra}\n\n章节标题：${title || ''}\n章节片段（${i + 1}/${chunks.length}）：\n${chunks[i]}`, model);
+            const text = await callLlm(`${ANALYZE_SYSTEM}${sysExtra}\n\n章节标题：${title || ''}\n章节片段（${i + 1}/${chunks.length}）：\n${chunks[i]}`, model, signal);
             const arr = extractScenesJson(text);
             if (Array.isArray(arr)) allScenes.push(...arr);
         } catch (e) {
@@ -387,10 +416,47 @@ app.get('/api/health', (req, res) => {
 });
 
 // ---- 章节 CRUD ----
-app.get('/api/chapters', (req, res) => res.json({ success: true, chapters }));
+// ---- 小说 CRUD ----
+app.get('/api/novels', (req, res) => res.json({ success: true, novels }));
+app.post('/api/novels', (req, res) => {
+    const name = (req.body.name || '未命名小说').trim() || '未命名小说';
+    const novel = { id: uid(), name, createdAt: new Date().toISOString() };
+    novels.unshift(novel);
+    saveJson(NOVELS_FILE, novels);
+    res.json({ success: true, novel });
+});
+app.put('/api/novels/:id', (req, res) => {
+    const idx = novels.findIndex(n => n.id === req.params.id);
+    if (idx < 0) return res.status(404).json({ error: '小说不存在' });
+    if (req.body.name) novels[idx].name = req.body.name;
+    saveJson(NOVELS_FILE, novels);
+    res.json({ success: true, novel: novels[idx] });
+});
+app.delete('/api/novels/:id', (req, res) => {
+    const nid = req.params.id;
+    // 清理该小说下所有章节和插图
+    const chs = chapters.filter(c => c.novelId === nid);
+    chs.forEach(c => extractLocalImages(c.content || '').forEach(deleteLocalImage));
+    chapters = chapters.filter(c => c.novelId !== nid);
+    const illus = illustrations.filter(i => i.novelId === nid);
+    illus.forEach(i => deleteLocalImage(i.image));
+    illustrations = illustrations.filter(i => i.novelId !== nid);
+    novels = novels.filter(n => n.id !== nid);
+    saveJson(CHAPTERS_FILE, chapters);
+    saveJson(ILLUS_FILE, illustrations);
+    saveJson(NOVELS_FILE, novels);
+    res.json({ success: true });
+});
+
+app.get('/api/chapters', (req, res) => {
+    const nid = req.query.novelId;
+    const list = nid ? chapters.filter(c => c.novelId === nid) : chapters;
+    res.json({ success: true, chapters: list });
+});
 app.post('/api/chapters', (req, res) => {
-    const { id, title, content } = req.body;
+    const { id, title, content, novelId } = req.body;
     if (!content) return res.status(400).json({ error: '缺少章节内容' });
+    const nid = novelId || novels[0]?.id;
     if (id) {
         const idx = chapters.findIndex(c => c.id === id);
         if (idx >= 0) {
@@ -399,7 +465,7 @@ app.post('/api/chapters', (req, res) => {
             return res.json({ success: true, chapter: chapters[idx] });
         }
     }
-    const chapter = { id: uid(), title: title || '未命名章节', content, createdAt: new Date().toISOString() };
+    const chapter = { id: uid(), title: title || '未命名章节', content, novelId: nid, createdAt: new Date().toISOString() };
     chapters.unshift(chapter);
     saveJson(CHAPTERS_FILE, chapters);
     res.json({ success: true, chapter });
@@ -445,9 +511,9 @@ app.delete('/api/chapters/:id', (req, res) => {
 
 // ---- 插图库 CRUD ----
 app.get('/api/illustrations', (req, res) => {
-    const list = req.query.chapterId
-        ? illustrations.filter(i => i.chapterId === req.query.chapterId)
-        : illustrations;
+    let list = illustrations;
+    if (req.query.novelId) list = list.filter(i => i.novelId === req.query.novelId);
+    if (req.query.chapterId) list = list.filter(i => i.chapterId === req.query.chapterId);
     res.json({ success: true, illustrations: list });
 });
 app.post('/api/illustrations', (req, res) => {
@@ -533,12 +599,18 @@ app.get('/api/novelai-models', (req, res) => {
 
 // ---- 只做 LLM 分析（返回场景列表，不生图）----
 app.post('/api/analyze-only', async (req, res) => {
+    const ctrl = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
     try {
         const { title, content, model, analyzeTemplate, maxScenes } = req.body;
         if (!content) return res.status(400).json({ error: '缺少章节内容' });
-        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5);
+        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5, ctrl.signal);
         res.json({ success: true, scenes });
     } catch (e) {
+        if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
+            console.log('⏹ 客户端断开，LLM 分析已取消');
+            return;
+        }
         console.error('分析失败:', e.message);
         res.status(500).json({ error: e.message });
     }
@@ -546,6 +618,8 @@ app.post('/api/analyze-only', async (req, res) => {
 
 // ---- 单场景生图（前端逐张调用，可显示进度）----
 app.post('/api/generate-scene', async (req, res) => {
+    let aborted = false;
+    req.on('close', () => { aborted = true; });
     try {
         const { prompt, negative_prompt, engine = 'comfyui', workflowConfig } = req.body;
         const pre = req.body.promptPrefix || '';
@@ -569,10 +643,32 @@ app.post('/api/generate-scene', async (req, res) => {
             const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {});
             image = r.url; seed = r.seed;
         }
+        if (aborted) { console.log('⏹ 客户端已断开，跳过响应'); return; }
+        logStat(engine, true);
+        // 自动入库到插图库
+        try {
+            illustrations.unshift({
+                id: uid(), chapterId: chapterId || null, novelId: req.body.novelId || null,
+                scene: scene || '', prompt, anchor: anchor || '',
+                engine, seed, image, createdAt: new Date().toISOString()
+            });
+            saveJson(ILLUS_FILE, illustrations);
+        } catch (e) {}
         res.json({ success: true, image, seed });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        logStat(req.body.engine || 'unknown', false);
+        if (!res.headersSent) res.status(500).json({ error: e.message });
     }
+});
+
+// ---- 统计 ----
+app.get('/api/stats', (req, res) => {
+    res.json({ success: true, log: statsLog });
+});
+app.delete('/api/stats', (req, res) => {
+    statsLog = [];
+    saveJson(STATS_FILE, statsLog);
+    res.json({ success: true });
 });
 
 // ---- 一站式：分析 + 生图 + 入库（保留兼容）----

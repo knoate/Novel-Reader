@@ -429,6 +429,16 @@
                 <label>后置固定正面提示词（拼在每条 prompt 最后面）</label>
                 <textarea id="fixedPositiveSuffix" style="min-height:60px;" placeholder="如: anime style, soft lighting, depth of field,"></textarea>
             </div>
+            <div class="tpl-field">
+                <label>🔄 提示词替换规则（每行一条）</label>
+                <textarea id="promptReplaceRules" style="min-height:100px;font-family:monospace;font-size:12px;" placeholder="触发词=替换|新词
+触发词=前置|额外词
+触发词=后置|额外词"></textarea>
+                <div class="tpl-hint">💡 生成前自动按规则改写 prompt：<br>
+                • <code>触发词=替换|新词</code>：prompt 中出现「触发词」时替换为「新词」<br>
+                • <code>触发词=前置|额外词</code>：出现「触发词」时在最前面加上「额外词」<br>
+                • <code>触发词=后置|额外词</code>：出现「触发词」时在最后面加上「额外词」</div>
+            </div>
         </div>
 
         <!-- Grok/Banana 配置 -->
@@ -937,21 +947,54 @@
         // 固定前置/后置正面提示词
         const fixedPrefixEl = document.getElementById('fixedPositivePrefix');
         const fixedSuffixEl = document.getElementById('fixedPositiveSuffix');
+        const replaceRulesEl = document.getElementById('promptReplaceRules');
         function loadFixedPrompts() {
             try {
                 const s = JSON.parse(localStorage.getItem('fixed_prompts') || '{}');
                 fixedPrefixEl.value = s.prefix || '';
                 fixedSuffixEl.value = s.suffix || '';
+                replaceRulesEl.value = s.replaceRules || '';
             } catch (e) {}
         }
         function saveFixedPrompts() {
             localStorage.setItem('fixed_prompts', JSON.stringify({
                 prefix: fixedPrefixEl.value.trim(),
-                suffix: fixedSuffixEl.value.trim()
+                suffix: fixedSuffixEl.value.trim(),
+                replaceRules: replaceRulesEl.value
             }));
         }
         fixedPrefixEl.addEventListener('input', saveFixedPrompts);
         fixedSuffixEl.addEventListener('input', saveFixedPrompts);
+        replaceRulesEl.addEventListener('input', saveFixedPrompts);
+
+        // 应用替换规则
+        function applyReplaceRules(prompt) {
+            const text = replaceRulesEl.value || '';
+            if (!text || !prompt) return prompt;
+            let out = prompt;
+            const pres = [];
+            const posts = [];
+            for (const line of text.split('\n')) {
+                const s = line.trim();
+                if (!s || !s.includes('=')) continue;
+                const [trigger, rest] = s.split('=', 2);
+                if (!rest) continue;
+                const parts = rest.split('|');
+                const action = parts[0]?.trim();
+                const val = (parts[1] || '').trim();
+                if (!out.includes(trigger)) continue;
+                if (action === '替换') {
+                    out = out.split(trigger).join(val);
+                } else if (action === '前置') {
+                    pres.push(val);
+                } else if (action === '后置') {
+                    posts.push(val);
+                }
+            }
+            if (pres.length) out = pres.join(', ') + ', ' + out;
+            if (posts.length) out = out + ', ' + posts.join(', ');
+            return out;
+        }
         loadFixedPrompts();
         loadAnalyzerRule();
 
@@ -1012,7 +1055,7 @@
         document.getElementById('grokTestBtn').addEventListener('click', async () => {
             const btn = document.getElementById('grokTestBtn');
             const result = document.getElementById('grokTestResult');
-            const prompt = document.getElementById('grokTestPrompt').value.trim() || 'a cute cat sitting on a windowsill, sunny day, anime style';
+            const prompt = applyReplaceRules(document.getElementById('grokTestPrompt').value.trim() || 'a cute cat sitting on a windowsill, sunny day, anime style');
             btn.disabled = true;
             const oldText = btn.textContent;
             btn.textContent = '⏳ 生成中...';

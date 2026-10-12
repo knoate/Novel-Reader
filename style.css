@@ -79,6 +79,11 @@ body {
     background: rgba(255, 216, 102, 0.08);
 }
 
+.chapter-item-sidebar.read .title {
+    color: #666;
+    opacity: 0.6;
+}
+
 .chapter-item-sidebar .num {
     color: #666;
     font-size: 12px;
@@ -508,6 +513,15 @@ body {
     .main-header .actions button {
         padding: 6px 10px !important;
         font-size: 12px !important;
+    }
+
+    #novelSelect {
+        font-size: 15px !important;
+        padding: 8px !important;
+    }
+    #novelSelector button {
+        padding: 8px 4px !important;
+        font-size: 13px !important;
     }
 
     .content-area {

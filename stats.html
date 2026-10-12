@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>生图统计</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background:#14142a; color:#e0e0e0; font-family:-apple-system,"Microsoft YaHei",sans-serif; padding:16px; }
+.header { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+.header h1 { font-size:18px; }
+.cards { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
+@media (max-width:600px){ .cards{ grid-template-columns:repeat(2,1fr);} }
+.card { background:#1e1e3a; border-radius:10px; padding:12px; text-align:center; }
+.card .num { font-size:22px; font-weight:bold; }
+.card .label { font-size:12px; color:#888; margin-top:4px; }
+.card.green .num{color:#4ade80;} .card.yellow .num{color:#ffd866;} .card.blue .num{color:#60a5fa;} .card.orange .num{color:#fb923c;} .card.red .num{color:#f87171;}
+.range-btns { display:flex; gap:6px; margin-bottom:12px; }
+.range-btns button { background:#2a2a4a; color:#aaa; border:1px solid #3a3a5e; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
+.range-btns button.active { background:#7c3aed; color:white; border-color:#7c3aed; }
+canvas { width:100%; height:200px; background:#1e1e3a; border-radius:10px; margin-bottom:16px; }
+.engine-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px; }
+.engine-row .bar { flex:1; height:14px; background:#2a2a4a; border-radius:7px; overflow:hidden; }
+.engine-row .bar-fill { height:100%; border-radius:7px; }
+.engine-row .cnt { width:60px; text-align:right; color:#aaa; }
+.actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+.actions button { padding:8px 16px; border-radius:6px; border:1px solid #3a3a5e; background:#2a2a4a; color:#e0e0e0; cursor:pointer; }
+.actions .danger { background:#7f1d1d; border-color:#f87171; color:#f87171; }
+</style>
+</head>
+<body>
+<div class="header">
+    <span>🎨</span><h1>生图统计</h1>
+    <a href="/" style="margin-left:auto;font-size:13px;color:#60a5fa;text-decoration:none;">← 返回阅读器</a>
+</div>
+<div class="cards">
+    <div class="card green"><div class="num" id="cTotal">0</div><div class="label">累计成功</div></div>
+    <div class="card yellow"><div class="num" id="cRate">0%</div><div class="label">成功率</div></div>
+    <div class="card blue"><div class="num" id="cDays">0</div><div class="label">创作天数</div></div>
+    <div class="card orange"><div class="num" id="cAvg">0</div><div class="label">日均张数</div></div>
+    <div class="card red"><div class="num" id="cFail">0</div><div class="label">失败次数</div></div>
+</div>
+<div class="range-btns">
+    <button data-range="day" class="active">日</button>
+    <button data-range="week">周</button>
+    <button data-range="month">月</button>
+</div>
+<canvas id="chart" width="800" height="200"></canvas>
+<div id="engineBars"></div>
+<div class="actions">
+    <button onclick="load()">刷新</button>
+    <button class="danger" onclick="resetStats()">重置统计</button>
+</div>
+<p style="margin-top:12px;font-size:12px;color:#666;">💡 每次生图成功/失败自动记录，永久保存。</p>
+<script>
+let log = [], range = 'day';
+async function load() {
+    const r = await fetch('/api/stats');
+    const d = await r.json();
+    log = d.log || [];
+    render();
+}
+async function resetStats() {
+    if (!confirm('确定清空所有统计记录？')) return;
+    await fetch('/api/stats', { method: 'DELETE' });
+    load();
+}
+document.querySelectorAll('.range-btns button').forEach(b => {
+    b.onclick = () => {
+        document.querySelectorAll('.range-btns button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        range = b.dataset.range;
+        render();
+    };
+});
+function bucket(t) {
+    const d = new Date(t);
+    if (range === 'day') return d.toISOString().slice(0,10);
+    if (range === 'week') {
+        const onejan = new Date(d.getFullYear(),0,1);
+        const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay()+1)/7);
+        return d.getFullYear()+'W'+week;
+    }
+    return d.toISOString().slice(0,7);
+}
+function render() {
+    const success = log.filter(x => x.success);
+    const fail = log.length - success.length;
+    document.getElementById('cTotal').textContent = success.length;
+    document.getElementById('cFail').textContent = fail;
+    document.getElementById('cRate').textContent = log.length ? Math.round(success.length/log.length*100)+'%' : '0%';
+    const days = new Set(success.map(x => new Date(x.t).toISOString().slice(0,10)));
+    document.getElementById('cDays').textContent = days.size;
+    document.getElementById('cAvg').textContent = days.size ? (success.length/days.size).toFixed(1) : 0;
+    // 按引擎统计
+    const byEngine = {};
+    success.forEach(x => byEngine[x.engine] = (byEngine[x.engine]||0)+1);
+    const engines = Object.entries(byEngine).sort((a,b)=>b[1]-a[1]);
+    const colors = { comfyui:'#a855f7', grok:'#fb923c', novelai:'#4ade80', sd:'#60a5fa' };
+    const maxE = engines[0]?.[1] || 1;
+    document.getElementById('engineBars').innerHTML = engines.map(([e,c]) =>
+        `<div class="engine-row"><span>${e}</span><div class="bar"><div class="bar-fill" style="width:${c/maxE*100}%;background:${colors[e]||'#888'};"></div></div><span class="cnt">${c}张</span></div>`
+    ).join('');
+    // 折线图
+    const buckets = {};
+    success.forEach(x => { const k = bucket(x.t); buckets[k] = (buckets[k]||0)+1; });
+    const keys = Object.keys(buckets).sort();
+    const vals = keys.map(k => buckets[k]);
+    drawChart(keys, vals);
+}
+function drawChart(labels, vals) {
+    const c = document.getElementById('chart');
+    const ctx = c.getContext('2d');
+    const W = c.width = c.clientWidth * 2, H = c.height = 400;
+    ctx.scale(2,2);
+    const w = c.clientWidth, h = 200;
+    ctx.clearRect(0,0,w,h);
+    const max = Math.max(...vals, 10);
+    const pad = 30;
+    const n = labels.length;
+    if (!n) return;
+    // grid
+    ctx.strokeStyle = '#2a2a4a'; ctx.lineWidth = 1;
+    for (let i=0;i<=4;i++) {
+        const y = pad + (h-2*pad)*i/4;
+        ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke();
+        ctx.fillStyle='#666'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+        ctx.fillText(Math.round(max*(1-i/4)), pad-4, y+3);
+    }
+    // line
+    ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 2; ctx.beginPath();
+    labels.forEach((lb,i) => {
+        const x = pad + (w-2*pad)*i/(n-1 || 1);
+        const y = pad + (h-2*pad)*(1 - vals[i]/max);
+        i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+    // dots
+    ctx.fillStyle = '#a855f7';
+    labels.forEach((lb,i) => {
+        const x = pad + (w-2*pad)*i/(n-1 || 1);
+        const y = pad + (h-2*pad)*(1 - vals[i]/max);
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+        if (vals[i] > 0) { ctx.fillStyle='#fff'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(vals[i], x, y-8); ctx.fillStyle='#a855f7'; }
+    });
+    // x labels
+    ctx.fillStyle='#666'; ctx.font='9px sans-serif'; ctx.textAlign='center';
+    labels.forEach((lb,i) => {
+        if (n > 10 && i % Math.ceil(n/8) !== 0) return;
+        const x = pad + (w-2*pad)*i/(n-1 || 1);
+        ctx.fillText(lb.slice(5), x, h-8);
+    });
+}
+load();
+</script>
+</body>
+</html>

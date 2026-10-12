@@ -68,6 +68,14 @@
                 <h2>📚 章节列表</h2>
                 <span class="badge" id="chapterCount">0 章</span>
             </div>
+            <div id="novelSelector" style="padding:8px 12px;border-bottom:1px solid #2a2a4a;">
+                <select id="novelSelect" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="newNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">➕ 新建</button>
+                    <button id="renameNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
+                    <button id="delNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
+                </div>
+            </div>
             <div class="chapter-list-sidebar" id="chapterListSidebar">
                 <div class="empty-state" style="padding:40px 20px;font-size:14px;">
                     <div>📭 暂无章节</div>
@@ -104,11 +112,15 @@
                         <button id="themeBtn" title="切换阅读主题">🌙 夜间</button>
                     </span>
                     <button id="aiIllustratorBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">🎨 配图工具</button>
-                    <button id="comfyConfigBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">⚙️ ComfyUI配置</button>
-                    <button id="apiConfigBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">⚙️ API配置</button>
-                    <button id="comfyTestBtn" style="background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;">🧪 测试</button>
-                    <button id="novelaiTestBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI</button>
-                    <button id="novelaiApiBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI-蛋糕</button>
+                    <button onclick="location.href='/stats.html'" style="background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;">📊 统计</button>
+                    <button id="moreToolsBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">⚙️ 更多 ▾</button>
+                    <span id="moreToolsGroup" style="display:none;flex-wrap:wrap;gap:6px;width:100%;margin-top:4px;">
+                        <button id="comfyConfigBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">⚙️ ComfyUI配置</button>
+                        <button id="apiConfigBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">⚙️ API配置</button>
+                        <button id="comfyTestBtn" style="background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;">🧪 测试</button>
+                        <button id="novelaiTestBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI</button>
+                        <button id="novelaiApiBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI-蛋糕</button>
+                    </span>
                 </div>
             </div>
 
@@ -250,14 +262,18 @@
             }
 
             chapterCount.textContent = `${chapters.length} 章`;
+            const readSet = getReadSet();
             let html = '';
             for (let i = 0; i < chapters.length; i++) {
                 const ch = chapters[i];
                 const title = ch.title || `第 ${i + 1} 章`;
                 const active = i === currentIndex ? 'active' : '';
+                const readCls = readSet.has(i) ? 'read' : '';
+                const dot = readSet.has(i) ? '✅' : '⭕';
                 html += `
-                    <div class="chapter-item-sidebar ${active}" data-index="${i}">
+                    <div class="chapter-item-sidebar ${active} ${readCls}" data-index="${i}">
                         <span class="num">${i + 1}</span>
+                        <span style="font-size:11px;">${dot}</span>
                         <span class="title">${escapeHtml(title)}</span>
                         <span class="word-count">${ch.wordCount || ch.content?.length || 0}</span>
                         <span class="del-chapter" data-index="${i}" title="删除本章" style="cursor:pointer;color:#666;font-size:14px;padding:0 4px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#666'">✕</span>
@@ -326,7 +342,13 @@
             // 图片渲染
             let content = ch.content || '';
             content = content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-                return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid #2a2a4a;margin:4px 0;">`;
+                const safeUrl = escapeHtml(url);
+                const safeAlt = escapeHtml(alt);
+                return `<div style="margin:8px 0;text-align:center;">
+<img src="${safeUrl}" alt="${safeAlt}" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid #2a2a4a;">
+<div style="margin-top:4px;">
+<a href="${safeUrl}" download="${safeAlt || 'image'}.png" style="font-size:12px;color:#ffd866;text-decoration:none;padding:2px 10px;border:1px solid #ffd866;border-radius:10px;">⬇️ 保存图片</a>
+</div></div>`;
             });
 
             contentArea.innerHTML = `
@@ -347,6 +369,17 @@
             nextBtn.style.opacity = currentIndex < chapters.length - 1 ? '1' : '0.4';
         }
 
+        function getReadSet() {
+            const key = 'novel_reader_read_' + (currentNovelId || 'default');
+            try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); }
+            catch { return new Set(); }
+        }
+        function markRead(i) {
+            const key = 'novel_reader_read_' + (currentNovelId || 'default');
+            const s = getReadSet();
+            s.add(i);
+            localStorage.setItem(key, JSON.stringify([...s]));
+        }
         function selectChapter(index) {
             if (index < 0 || index >= chapters.length) return;
             currentIndex = index;
@@ -354,6 +387,17 @@
             contentArea.scrollTop = 0;
             saveProgress();
         }
+
+        // 滚动到底部自动标记已读
+        contentArea.addEventListener('scroll', () => {
+            const el = contentArea;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+                if (!getReadSet().has(currentIndex)) {
+                    markRead(currentIndex);
+                    renderSidebar();
+                }
+            }
+        });
 
         function escapeHtml(text) {
             if (!text) return '';
@@ -391,7 +435,7 @@
                         try {
                             const r = await fetch(`${API_BASE}/api/chapters`, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ title, content })
+                                body: JSON.stringify({ title, content, novelId: currentNovelId })
                             });
                             const data = await r.json();
                             if (data.success && data.chapter) chapters[chapters.length - 1]._id = data.chapter.id;
@@ -515,6 +559,10 @@
 
         aiStopBtn.addEventListener('click', () => {
             if (aiAbortController) aiAbortController.abort();
+            // 兜底：立即恢复 UI
+            aiImageBtn.textContent = '✨ AI 自动配图';
+            aiImageBtn.disabled = false;
+            aiStopBtn.style.display = 'none';
         });
 
         aiImageBtn.addEventListener('click', async () => {
@@ -589,11 +637,34 @@
                         requestBody.height = h;
                     } catch (e) {}
                 }
-                // 固定前置/后置提示词
+                // 固定前置/后置提示词 + 替换规则
                 try {
                     const fp = JSON.parse(localStorage.getItem('fixed_prompts') || '{}');
                     requestBody.promptPrefix = fp.prefix || '';
                     requestBody.promptSuffix = fp.suffix || '';
+                    // 应用替换规则到每个场景
+                    const rulesText = fp.replaceRules || '';
+                    if (rulesText) {
+                        for (const sc of scenes) {
+                            let out = sc.prompt;
+                            const pres = [], posts = [];
+                            for (const line of rulesText.split('\n')) {
+                                const s = line.trim();
+                                if (!s || !s.includes('=')) continue;
+                                const [trigger, rest] = s.split('=', 2);
+                                if (!rest || !out.includes(trigger)) continue;
+                                const parts = rest.split('|');
+                                const action = (parts[0]||'').trim();
+                                const val = (parts[1]||'').trim();
+                                if (action === '替换') out = out.split(trigger).join(val);
+                                else if (action === '前置') pres.push(val);
+                                else if (action === '后置') posts.push(val);
+                            }
+                            if (pres.length) out = pres.join(', ') + ', ' + out;
+                            if (posts.length) out = out + ', ' + posts.join(', ');
+                            sc.prompt = out;
+                        }
+                    }
                 } catch (e) {}
 
                 const progressPanel = document.getElementById('aiProgressPanel');
@@ -601,6 +672,7 @@
                 const progressLog = document.getElementById('aiProgressLog');
                 progressPanel.style.display = 'block';
                 progressLog.innerHTML = '';
+                progressTitle.textContent = '准备中...';
                 const logLine = (html) => { progressLog.innerHTML += html + '<br>'; progressLog.scrollTop = progressLog.scrollHeight; };
                 const t = (ms) => (ms/1000).toFixed(1) + 's';
 
@@ -632,6 +704,7 @@
 
                 if (!scenes.length) {
                     showToast('ℹ️ 未找到适合配图的场景');
+                    progressTitle.textContent = 'ℹ️ 未找到场景';
                     return;
                 }
 
@@ -651,7 +724,8 @@
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 prompt: scene.prompt, negative_prompt: scene.negative_prompt || '',
-                                engine, workflowConfig, ...requestBody
+                                engine, workflowConfig, scene: sceneLabel, anchor: scene.anchor || '',
+                                ...requestBody, novelId: currentNovelId
                             }),
                             signal: aiAbortController.signal
                         });
@@ -950,6 +1024,14 @@
             document.body.classList.remove('sidebar-open');
         });
 
+        // 折叠更多配置按钮
+        document.getElementById('moreToolsBtn').addEventListener('click', () => {
+            const g = document.getElementById('moreToolsGroup');
+            const open = g.style.display !== 'none';
+            g.style.display = open ? 'none' : 'flex';
+            document.getElementById('moreToolsBtn').textContent = open ? '⚙️ 更多 ▾' : '⚙️ 更多 ▴';
+        });
+
         prevBtn.addEventListener('click', () => {
             if (currentIndex > 0) selectChapter(currentIndex - 1);
         });
@@ -1063,11 +1145,32 @@
         }
 
         // ============================================================
-        //  12. 初始化：从后端加载章节
+        //  12. 初始化：从后端加载小说列表 + 章节
         // ============================================================
+        let novels = [];
+        let currentNovelId = localStorage.getItem('novel_reader_current') || null;
+
+        async function loadNovels() {
+            try {
+                const r = await fetch(`${API_BASE}/api/novels`);
+                const data = await r.json();
+                if (data.success && Array.isArray(data.novels)) {
+                    novels = data.novels;
+                    const sel = document.getElementById('novelSelect');
+                    sel.innerHTML = novels.map(n => `<option value="${n.id}">${escapeHtml(n.name)}</option>`).join('');
+                    if (!currentNovelId || !novels.find(n => n.id === currentNovelId)) {
+                        currentNovelId = novels[0]?.id || null;
+                    }
+                    if (currentNovelId) sel.value = currentNovelId;
+                    localStorage.setItem('novel_reader_current', currentNovelId || '');
+                }
+            } catch (e) { console.warn('加载小说列表失败:', e); }
+        }
+
         async function loadChaptersFromServer() {
             try {
-                const r = await fetch(`${API_BASE}/api/chapters`);
+                const url = currentNovelId ? `${API_BASE}/api/chapters?novelId=${currentNovelId}` : `${API_BASE}/api/chapters`;
+                const r = await fetch(url);
                 const data = await r.json();
                 if (data.success && Array.isArray(data.chapters) && data.chapters.length) {
                     chapters = data.chapters.map(c => ({
@@ -1076,9 +1179,54 @@
                     }));
                     return true;
                 }
+                chapters = [];
             } catch (e) { console.warn('加载章节失败:', e); }
             return false;
         }
+
+        async function switchNovel(nid) {
+            currentNovelId = nid;
+            localStorage.setItem('novel_reader_current', nid || '');
+            currentIndex = 0;
+            await loadChaptersFromServer();
+            renderSidebar();
+            renderContent();
+        }
+
+        // 小说选择器事件
+        document.getElementById('novelSelect').addEventListener('change', (e) => switchNovel(e.target.value));
+        document.getElementById('newNovelBtn').addEventListener('click', async () => {
+            const name = prompt('输入小说名称：');
+            if (!name) return;
+            const r = await fetch(`${API_BASE}/api/novels`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const data = await r.json();
+            if (data.success) {
+                await loadNovels();
+                document.getElementById('novelSelect').value = data.novel.id;
+                await switchNovel(data.novel.id);
+            }
+        });
+        document.getElementById('renameNovelBtn').addEventListener('click', async () => {
+            const cur = novels.find(n => n.id === currentNovelId);
+            if (!cur) return;
+            const name = prompt('重命名小说：', cur.name);
+            if (!name) return;
+            await fetch(`${API_BASE}/api/novels/${currentNovelId}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            await loadNovels();
+        });
+        document.getElementById('delNovelBtn').addEventListener('click', async () => {
+            if (!currentNovelId) return;
+            if (!confirm('删除这本小说及其所有章节和插图？此操作不可恢复！')) return;
+            await fetch(`${API_BASE}/api/novels/${currentNovelId}`, { method: 'DELETE' });
+            await loadNovels();
+            if (novels[0]) await switchNovel(novels[0].id);
+        });
 
         // 保存当前章节到后端（AI 配图改了内容后调用）
         async function saveCurrentChapter() {
@@ -1087,26 +1235,20 @@
             try {
                 await fetch(`${API_BASE}/api/chapters`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: ch._id, title: ch.title, content: ch.content })
+                    body: JSON.stringify({ id: ch._id, title: ch.title, content: ch.content, novelId: currentNovelId })
                 });
             } catch (e) { console.warn('保存章节失败:', e); }
         }
 
         applyReaderSettings();
         (async () => {
+            await loadNovels();
             const loaded = await loadChaptersFromServer();
             if (!loaded) {
-                // 后端没有章节，用示例
-                chapters = parseChapters(`第一章 开端
-这是小说的第一段内容。故事从这里开始……
-主角走在一条漫长的道路上，前方是未知的命运。
-
-第二章 相遇
-在旅途中，主角遇到了一个神秘的人物。
-这个人穿着黑色的斗篷，看不清面容。
-"你是谁？"主角问道。
-对方没有回答，只是默默转身离去。`);
+                chapters = [];
             }
+            renderSidebar();
+            renderContent();
             // 恢复阅读进度
             try {
                 const prog = JSON.parse(localStorage.getItem('novel_reader_progress') || 'null');
