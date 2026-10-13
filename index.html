@@ -271,8 +271,9 @@
                 const ch = chapters[i];
                 const title = ch.title || `第 ${i + 1} 章`;
                 const active = i === currentIndex ? 'active' : '';
-                const readCls = readSet.has(i) ? 'read' : '';
-                const dot = readSet.has(i) ? '✅' : '⭕';
+                const read = isRead(i);
+                const readCls = read ? 'read' : '';
+                const dot = read ? '✅' : '⭕';
                 html += `
                     <div class="chapter-item-sidebar ${active} ${readCls}" data-index="${i}">
                         <span class="num">${i + 1}</span>
@@ -378,10 +379,18 @@
             catch { return new Set(); }
         }
         function markRead(i) {
+            const ch = chapters[i];
+            if (!ch) return;
+            const id = ch._id || ('idx_' + i);
             const key = 'novel_reader_read_' + (currentNovelId || 'default');
             const s = getReadSet();
-            s.add(i);
+            s.add(id);
             localStorage.setItem(key, JSON.stringify([...s]));
+        }
+        function isRead(i) {
+            const ch = chapters[i];
+            if (!ch) return false;
+            return getReadSet().has(ch._id || ('idx_' + i));
         }
         function selectChapter(index) {
             if (index < 0 || index >= chapters.length) return;
@@ -415,7 +424,7 @@
         contentArea.addEventListener('scroll', () => {
             const el = contentArea;
             if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
-                if (!getReadSet().has(currentIndex)) {
+                if (!isRead(currentIndex)) {
                     markRead(currentIndex);
                     renderSidebar();
                 }
@@ -639,6 +648,7 @@
             showToast(`🧠 使用 ${engineLabel} 分析章节...`);
 
             aiAbortController = new AbortController();
+            let timerId = null;
             try {
                 const requestBody = {
                     title: title,
@@ -706,7 +716,7 @@
                 const timerEl = document.createElement('div');
                 timerEl.style.cssText = 'color:#4ade80;font-size:11px;margin-top:6px;';
                 progressPanel.appendChild(timerEl);
-                const timerId = setInterval(() => {
+                timerId = setInterval(() => {
                     timerEl.textContent = '⏱️ ' + t(Date.now() - wallStart);
                 }, 100);
 
@@ -791,6 +801,7 @@
                     }
                     const infoHtml = `<div class="prompt-text"><div>📝 场景：${escapeHtml(sceneLabel)}</div><div>📌 提示词：${escapeHtml(promptText)}</div></div>`;
                     ch.content = ch.content.slice(0, insertPos) + `\n\n---\n![${escapeHtml(sceneLabel)}](${imageUrl})\n${infoHtml}\n---\n` + ch.content.slice(insertPos);
+                    saveCurrentChapter();
                 }
 
                 ch._aiProcessed = true;
@@ -1274,11 +1285,14 @@
         async function saveCurrentChapter() {
             if (currentIndex < 0 || !chapters[currentIndex]) return;
             const ch = chapters[currentIndex];
+            console.log('💾 保存章节:', { id: ch._id, title: ch.title, contentLen: ch.content?.length, hasImage: ch.content?.includes('![') });
             try {
-                await fetch(`${API_BASE}/api/chapters`, {
+                const r = await fetch(`${API_BASE}/api/chapters`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: ch._id, title: ch.title, content: ch.content, novelId: currentNovelId })
                 });
+                const data = await r.json();
+                console.log('💾 保存结果:', data);
             } catch (e) { console.warn('保存章节失败:', e); }
         }
 

@@ -479,7 +479,7 @@ app.post('/api/chapters', (req, res) => {
         }
     }
     const chapter = { id: uid(), title: title || '未命名章节', content, novelId: nid, createdAt: new Date().toISOString() };
-    chapters.unshift(chapter);
+    chapters.push(chapter);
     saveJson(CHAPTERS_FILE, chapters);
     res.json({ success: true, chapter });
 });
