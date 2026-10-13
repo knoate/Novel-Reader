@@ -107,8 +107,8 @@
                     <button id="aiStopBtn" style="display:none;background:#f87171;color:white;border:1px solid #f87171;font-weight:bold;">⏹ 终止</button>
                     <input id="maxScenesInput" type="number" min="1" max="20" value="5" title="每章最多生成几张图" style="width:50px;padding:4px 6px;background:#2a2a4a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:5px;font-size:12px;text-align:center;">
                     <button id="currentEngineBtn" title="点击切换生图引擎" style="background:#14142a;color:#ffd866;border:1px solid #ffd866;font-size:12px;padding:4px 10px;border-radius:12px;cursor:pointer;">🎨 ComfyUI</button>
-                    <button id="fontDecBtn" title="缩小字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A-</button>
-                    <button id="fontIncBtn" title="放大字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A+</button>
+                    <button id="fontDecBtn" onclick="window._decSize&&window._decSize()" title="缩小字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A-</button>
+                    <button id="fontIncBtn" onclick="window._incSize&&window._incSize()" title="放大字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A+</button>
                     <button id="fontFamilyBtn" onclick="cycleFont()" title="切换字体（长按导入自定义字体）" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🔤 字体</button>
                     <button id="fontColorBtn" onclick="cycleColor()" title="设置字体颜色" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🎨 字色</button>
                     <button id="themeBtn" title="切换阅读主题" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🌙 夜间</button>
@@ -1144,6 +1144,8 @@
         document.getElementById('fontIncBtn').onclick = () => {
             readerSettings.fontSize = Math.min(26, readerSettings.fontSize + 1); applyReaderSettings();
         };
+        window._decSize = () => { readerSettings.fontSize = Math.max(13, readerSettings.fontSize - 1); applyReaderSettings(); };
+        window._incSize = () => { readerSettings.fontSize = Math.min(26, readerSettings.fontSize + 1); applyReaderSettings(); };
         document.getElementById('themeBtn').onclick = () => {
             readerSettings.theme = readerSettings.theme === 'dark' ? 'day'
                 : readerSettings.theme === 'day' ? 'sepia' : 'dark';
@@ -1153,12 +1155,12 @@
         // 字体切换
         const FONT_LIST = [
             { name: '默认', css: '' },
-            { name: '宋体', css: 'SimSun, serif' },
-            { name: '微软雅黑', css: 'Microsoft YaHei, sans-serif' },
-            { name: '楷体', css: 'KaiTi, KaiTi_GB2312, serif' },
-            { name: '黑体', css: 'SimHei, sans-serif' },
-            { name: '思源宋体', css: '"Source Han Serif CN", "Noto Serif CJK SC", serif' },
-            { name: '圆体', css: 'Yuanti SC, YouYuan, "Microsoft YaHei", sans-serif' },
+            { name: '衬线', css: "'Noto Serif CJK SC', 'Songti SC', serif" },
+            { name: '无衬线', css: "'Noto Sans CJK SC', 'PingFang SC', sans-serif" },
+            { name: '圆体', css: "'Noto Sans CJK SC', 'Yuanti SC', sans-serif" },
+            { name: '宋体(PC)', css: 'SimSun, serif' },
+            { name: '雅黑(PC)', css: "'Microsoft YaHei', sans-serif" },
+            { name: '楷体(PC)', css: 'KaiTi, serif' },
         ];
         let fontIdx = 0;
         try { fontIdx = FONT_LIST.findIndex(f => f.css === (readerSettings.fontFamily || '')); } catch (e) {}
