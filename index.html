@@ -46,6 +46,8 @@
             font-size: var(--reader-font-size, 17px);
             line-height: 2;
             transition: font-size .15s ease;
+            color: var(--reader-color, inherit);
+            font-family: var(--reader-font-family, inherit);
         }
         body.theme-day { background: #f5f1e8; }
         body.theme-day .main-content, body.theme-day .content-area { background: #faf7f0; color: #2c2a26; }
@@ -107,16 +109,14 @@
                     <button id="currentEngineBtn" title="点击切换生图引擎" style="background:#14142a;color:#ffd866;border:1px solid #ffd866;font-size:12px;padding:4px 10px;border-radius:12px;cursor:pointer;">🎨 ComfyUI</button>
                     <button id="fontDecBtn" title="缩小字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A-</button>
                     <button id="fontIncBtn" title="放大字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A+</button>
+                    <button id="fontFamilyBtn" onclick="cycleFont()" title="切换字体（长按导入自定义字体）" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🔤 字体</button>
+                    <button id="fontColorBtn" onclick="cycleColor()" title="设置字体颜色" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🎨 字色</button>
+                    <button id="themeBtn" title="切换阅读主题" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🌙 夜间</button>
+                    <button id="bgBtn" title="设置背景图" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🖼️ 背景</button>
+                    <input type="file" id="bgFile" accept="image/*" style="display:none;">
                     <button id="toolsToggleBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">🛠️ ▾</button>
                     <span id="secondaryTools" style="display:none;flex-wrap:wrap;gap:4px;width:100%;margin-top:4px;">
                     <button id="togglePromptsBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">👁️ 显示提示词</button>
-                    <span class="reader-toolbar" style="display:inline-flex;gap:4px;">
-                        <button id="fontFamilyBtn" title="切换字体（长按导入自定义字体）">🔤 字体</button>
-                        <button id="fontColorBtn" title="设置字体颜色">🎨 字色</button>
-                        <button id="themeBtn" title="切换阅读主题">🌙 夜间</button>
-                        <button id="bgBtn" title="设置背景图">🖼️ 背景</button>
-                        <input type="file" id="bgFile" accept="image/*" style="display:none;">
-                    </span>
                     <button id="aiIllustratorBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">🎨 配图工具</button>
                     <button onclick="location.href='/stats.html'" style="background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;">📊 统计</button>
                     </span>
@@ -363,12 +363,6 @@
                 <div class="chapter-title">${escapeHtml(title)}</div>
                 <div class="chapter-content">${content}</div>
             `;
-            if (readerSettings.fontFamily) {
-                contentArea.style.fontFamily = readerSettings.fontFamily;
-            }
-            if (readerSettings.fontColor) {
-                contentArea.style.color = readerSettings.fontColor;
-            }
 
             // 保持提示词显示状态
             const toggleBtn = document.getElementById('togglePromptsBtn');
@@ -1134,13 +1128,8 @@
 
         function applyReaderSettings() {
             document.documentElement.style.setProperty('--reader-font-size', readerSettings.fontSize + 'px');
-            const cc = document.querySelector('.content-area');
-            if (cc) {
-                if (readerSettings.fontFamily) cc.style.fontFamily = readerSettings.fontFamily;
-                else cc.style.fontFamily = '';
-                if (readerSettings.fontColor) cc.style.color = readerSettings.fontColor;
-                else cc.style.color = '';
-            }
+            document.documentElement.style.setProperty('--reader-color', readerSettings.fontColor || '');
+            document.documentElement.style.setProperty('--reader-font-family', readerSettings.fontFamily || '');
             document.body.classList.remove('theme-day', 'theme-sepia');
             if (readerSettings.theme === 'day') document.body.classList.add('theme-day');
             else if (readerSettings.theme === 'sepia') document.body.classList.add('theme-sepia');
@@ -1175,7 +1164,7 @@
         try { fontIdx = FONT_LIST.findIndex(f => f.css === (readerSettings.fontFamily || '')); } catch (e) {}
         if (fontIdx < 0) fontIdx = 0;
         document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
-        document.getElementById('fontFamilyBtn').onclick = () => {
+        window.cycleFont = () => {
             fontIdx = (fontIdx + 1) % FONT_LIST.length;
             readerSettings.fontFamily = FONT_LIST[fontIdx].css;
             document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
@@ -1189,12 +1178,10 @@
         try { colorIdx = FONT_COLORS.indexOf(readerSettings.fontColor || ''); } catch (e) {}
         if (colorIdx < 0) colorIdx = 0;
         function applyFontColor() {
-            const c = FONT_COLORS[colorIdx];
-            const el = document.querySelector('.content-area');
-            if (el) el.style.color = c || '';
             document.getElementById('fontColorBtn').textContent = '🎨 ' + FONT_COLOR_NAMES[colorIdx];
         }
-        document.getElementById('fontColorBtn').onclick = () => {
+        document.getElementById('fontColorBtn').textContent = '🎨 ' + FONT_COLOR_NAMES[colorIdx];
+        window.cycleColor = () => {
             colorIdx = (colorIdx + 1) % FONT_COLORS.length;
             readerSettings.fontColor = FONT_COLORS[colorIdx];
             applyFontColor();
