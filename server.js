@@ -144,8 +144,9 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal) {
     if (!LLM_API_KEY) {
         return [
-            { scene: '主角站在山巅眺望远方', prompt: 'A lone figure standing on a mountain peak, overlooking a vast fantasy landscape, dramatic sunset lighting, epic scale, digital art, high quality', anchor: '主角站在山巅，目光投向远方' },
-            { scene: '神秘的森林小径', prompt: 'A mysterious forest path with glowing mushrooms, ancient trees, ethereal atmosphere, fantasy art, detailed, beautiful lighting', anchor: '森林小径蜿蜒向前，不知通往何处' }
+            { scene: '主角站在山巅眺望远方', prompt: 'A lone figure standing on a mountain peak, overlooking a vast fantasy landscape, dramatic sunset lighting, epic scale, digital art, highly detailed, cinematic composition', anchor: '主角站在山巅，目光投向远方' },
+            { scene: '神秘的森林小径', prompt: 'A mysterious forest path with glowing mushrooms, ancient trees, ethereal atmosphere, fantasy art, detailed, beautiful lighting', anchor: '林间小径蜿蜒而行，脚下是湿润的泥土与发光的蘑菇' },
+            { scene: '城门前的守卫', prompt: 'A vigilant guard standing at the city gate, armor shining under the moonlight, dramatic lighting, fantasy realism, epic atmosphere', anchor: '城门前的守卫纹丝不动，盯着远方' }
         ];
     }
     // 用户自定义的「绘图提示词生成规则」追加到系统指令
@@ -318,7 +319,7 @@ async function generateNovelAIImage(opts = {}) {
     if (!NOVELAI_API_KEY) throw new Error('未配置 NOVELAI_API_KEY');
     // 应用模板
     prompt = renderTemplate(promptTemplate, { prompt, __fallback: prompt });
-    negative_prompt = renderTemplate(negativeTemplate, { prompt, __fallback: negative_prompt || 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry' });
+    negative_prompt = renderTemplate(negativeTemplate, { prompt, __fallback: negative_prompt || 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped' });
     const payload = {
         input: prompt,
         model: model || 'nai-diffusion-5-full',
@@ -634,9 +635,29 @@ app.post('/api/generate-scene', async (req, res) => {
     let aborted = false;
     res.on('close', () => { if (!res.writableEnded) aborted = true; });
     try {
-        const { prompt, negative_prompt, engine = 'comfyui', workflowConfig } = req.body;
-        const pre = req.body.promptPrefix || '';
-        const suf = req.body.promptSuffix || '';
+        const {
+            prompt,
+            negative_prompt,
+            engine = 'comfyui',
+            workflowConfig,
+            chapterId,
+            scene,
+            anchor,
+            novelId,
+            promptPrefix,
+            promptSuffix,
+            comfyUrl,
+            apiUrl,
+            apiKey,
+            grokModel,
+            width,
+            height
+        } = req.body;
+
+        if (!prompt) return res.status(400).json({ error: '缺少绘图提示词' });
+
+        const pre = promptPrefix || '';
+        const suf = promptSuffix || '';
         const wrapped = wrapPrompt(prompt, { promptPrefix: pre, promptSuffix: suf });
         let image, seed;
         if (engine === 'novelai') {
@@ -645,28 +666,45 @@ app.post('/api/generate-scene', async (req, res) => {
         } else if (engine === 'grok') {
             const r = await generateGrokImage({
                 prompt: wrapped,
-                apiUrl: req.body.apiUrl,
-                apiKey: req.body.apiKey,
-                model: req.body.grokModel,
-                width: req.body.width,
-                height: req.body.height
+                apiUrl,
+                apiKey,
+                model: grokModel,
+                width,
+                height
             });
             image = r.url;
         } else {
-            const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {}, req.body.comfyUrl);
+            const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {}, comfyUrl);
             image = r.url; seed = r.seed;
         }
+
         if (aborted) { console.log('⏹ 客户端已断开，跳过响应'); return; }
         logStat(engine, true);
-        // 自动入库到插图库
+
+        // 自动入库到插图库：只在确有有效值时写入，避免未声明变量或空值导致异常
         try {
+            const safeChapterId = chapterId || null;
+            const safeScene = scene || '';
+            const safeAnchor = anchor || '';
+            const safeNovelId = novelId || null;
+
             illustrations.unshift({
-                id: uid(), chapterId: chapterId || null, novelId: req.body.novelId || null,
-                scene: scene || '', prompt, anchor: anchor || '',
-                engine, seed, image, createdAt: new Date().toISOString()
+                id: uid(),
+                chapterId: safeChapterId,
+                novelId: safeNovelId,
+                scene: safeScene,
+                prompt,
+                anchor: safeAnchor,
+                engine,
+                seed,
+                image,
+                createdAt: new Date().toISOString()
             });
             saveJson(ILLUS_FILE, illustrations);
-        } catch (e) {}
+        } catch (e) {
+            console.warn('插图库自动入库失败:', e.message);
+        }
+
         res.json({ success: true, image, seed });
     } catch (e) {
         logStat(req.body.engine || 'unknown', false);
@@ -719,7 +757,8 @@ app.post('/api/analyze-and-generate', async (req, res) => {
                 }
                 // 自动入库
                 const rec = {
-                    id: uid(), chapterId: chapterId || null,
+                    id: uid(),
+                    chapterId: chapterId || null,
                     scene: scene.scene, prompt: scene.prompt, anchor: scene.anchor,
                     engine: usedEngine, seed, image, createdAt: new Date().toISOString()
                 };
@@ -780,3 +819,4 @@ app.listen(PORT, HOST, () => {
     console.log(`章节库:    ${chapters.length} 条  插图库: ${illustrations.length} 条`);
     console.log('='.repeat(50));
 });
+
