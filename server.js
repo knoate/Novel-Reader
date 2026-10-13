@@ -53,8 +53,19 @@ function loadJson(file, fallback) {
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
     catch { return fallback; }
 }
+// 原地写文件可能在异常或并发时导致文件���断，改为先写临时文件再重命名，保证原子性
 function saveJson(file, data) {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+    try {
+        const dir = path.dirname(file);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const tmp = file + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+        fs.renameSync(tmp, file);
+    } catch (e) {
+        // 回退为直接写入（极端情况下），并打印警告
+        try { fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8'); }
+        catch (err) { console.warn('saveJson failed:', err.message); }
+    }
 }
 let novels = loadJson(NOVELS_FILE, []);
 let chapters = loadJson(CHAPTERS_FILE, []);
@@ -242,7 +253,7 @@ function buildComfyWorkflow(prompt, negativePrompt = '', config) {
     return {
         seed: Math.floor(Math.random() * 1e9),
         workflow: {
-            "3": { class_type: "KSampler", inputs: { seed: Math.floor(Math.random() * 1e9), steps: 20, cfg: 7, sampler_name: "euler", scheduler: "normal", denoise: 1, model: ["4", 0], positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] } },
+            "3": { class_type: "KSampler", inputs: { seed: Math.floor(Math.random() * 1e9), steps: 20, cfg: 7, sampler_name: "euler", scheduler: "normal", denoise: 1, model: ["4", 0], positive: [[...]
             "4": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: modelName } },
             "5": { class_type: "EmptyLatentImage", inputs: { width: 1024, height: 1024, batch_size: 1 } },
             "6": { class_type: "CLIPTextEncode", inputs: { text: finalPrompt, clip: ["4", 1] } },
@@ -528,6 +539,8 @@ app.get('/api/illustrations', (req, res) => {
     let list = illustrations;
     if (req.query.novelId) list = list.filter(i => i.novelId === req.query.novelId);
     if (req.query.chapterId) list = list.filter(i => i.chapterId === req.query.chapterId);
+    // 最新在前
+    list = list.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     res.json({ success: true, illustrations: list });
 });
 app.post('/api/illustrations', (req, res) => {
@@ -572,7 +585,7 @@ app.post('/api/generate', async (req, res) => {
     }
 });
 
-// ---- NovelAI 生图 ----
+// ---- NovelAI ��图 ----
 app.post('/api/novelai-generate', async (req, res) => {
     try {
         const images = await generateNovelAIImage(req.body);
@@ -660,6 +673,7 @@ app.post('/api/generate-scene', async (req, res) => {
         const suf = promptSuffix || '';
         const wrapped = wrapPrompt(prompt, { promptPrefix: pre, promptSuffix: suf });
         let image, seed;
+        let usedEngine = engine;
         if (engine === 'novelai') {
             const urls = await generateNovelAIImage({ ...req.body, prompt: wrapped, negative_prompt: negative_prompt || '' });
             image = urls[0];
@@ -679,33 +693,37 @@ app.post('/api/generate-scene', async (req, res) => {
         }
 
         if (aborted) { console.log('⏹ 客户端已断开，跳过响应'); return; }
-        logStat(engine, true);
+        logStat(usedEngine, true);
 
         // 自动入库到插图库：只在确有有效值时写入，避免未声明变量或空值导致异常
+        let rec = null;
         try {
             const safeChapterId = chapterId || null;
             const safeScene = scene || '';
             const safeAnchor = anchor || '';
             const safeNovelId = novelId || null;
 
-            illustrations.unshift({
+            rec = {
                 id: uid(),
                 chapterId: safeChapterId,
                 novelId: safeNovelId,
                 scene: safeScene,
                 prompt,
                 anchor: safeAnchor,
-                engine,
+                engine: usedEngine,
                 seed,
                 image,
                 createdAt: new Date().toISOString()
-            });
+            };
+
+            illustrations.unshift(rec);
             saveJson(ILLUS_FILE, illustrations);
         } catch (e) {
             console.warn('插图库自动入库失败:', e.message);
         }
 
-        res.json({ success: true, image, seed });
+        // 返回已保存的记录，便于前端即时展示（降低刷新/丢失感）
+        res.json({ success: true, image, seed, illustration: rec });
     } catch (e) {
         logStat(req.body.engine || 'unknown', false);
         if (!res.headersSent) res.status(500).json({ error: e.message });
