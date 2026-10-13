@@ -105,12 +105,12 @@
                     <button id="aiStopBtn" style="display:none;background:#f87171;color:white;border:1px solid #f87171;font-weight:bold;">⏹ 终止</button>
                     <input id="maxScenesInput" type="number" min="1" max="20" value="5" title="每章最多生成几张图" style="width:50px;padding:4px 6px;background:#2a2a4a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:5px;font-size:12px;text-align:center;">
                     <button id="currentEngineBtn" title="点击切换生图引擎" style="background:#14142a;color:#ffd866;border:1px solid #ffd866;font-size:12px;padding:4px 10px;border-radius:12px;cursor:pointer;">🎨 ComfyUI</button>
+                    <button id="fontDecBtn" title="缩小字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A-</button>
+                    <button id="fontIncBtn" title="放大字号" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">A+</button>
                     <button id="toolsToggleBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">🛠️ ▾</button>
                     <span id="secondaryTools" style="display:none;flex-wrap:wrap;gap:4px;width:100%;margin-top:4px;">
                     <button id="togglePromptsBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">👁️ 显示提示词</button>
                     <span class="reader-toolbar" style="display:inline-flex;gap:4px;">
-                        <button id="fontDecBtn" title="缩小字号">A-</button>
-                        <button id="fontIncBtn" title="放大字号">A+</button>
                         <button id="fontFamilyBtn" title="切换字体（长按导入自定义字体）">🔤 字体</button>
                         <button id="fontColorBtn" title="设置字体颜色">🎨 字色</button>
                         <button id="themeBtn" title="切换阅读主题">🌙 夜间</button>
@@ -364,10 +364,10 @@
                 <div class="chapter-content">${content}</div>
             `;
             if (readerSettings.fontFamily) {
-                contentArea.querySelector('.chapter-content').style.fontFamily = readerSettings.fontFamily;
+                contentArea.style.fontFamily = readerSettings.fontFamily;
             }
             if (readerSettings.fontColor) {
-                contentArea.querySelector('.chapter-content').style.color = readerSettings.fontColor;
+                contentArea.style.color = readerSettings.fontColor;
             }
 
             // 保持提示词显示状态
@@ -1134,8 +1134,12 @@
 
         function applyReaderSettings() {
             document.documentElement.style.setProperty('--reader-font-size', readerSettings.fontSize + 'px');
-            if (readerSettings.fontFamily) {
-                document.querySelector('.chapter-content').style.fontFamily = readerSettings.fontFamily;
+            const cc = document.querySelector('.content-area');
+            if (cc) {
+                if (readerSettings.fontFamily) cc.style.fontFamily = readerSettings.fontFamily;
+                else cc.style.fontFamily = '';
+                if (readerSettings.fontColor) cc.style.color = readerSettings.fontColor;
+                else cc.style.color = '';
             }
             document.body.classList.remove('theme-day', 'theme-sepia');
             if (readerSettings.theme === 'day') document.body.classList.add('theme-day');
@@ -1186,7 +1190,7 @@
         if (colorIdx < 0) colorIdx = 0;
         function applyFontColor() {
             const c = FONT_COLORS[colorIdx];
-            const el = document.querySelector('.chapter-content');
+            const el = document.querySelector('.content-area');
             if (el) el.style.color = c || '';
             document.getElementById('fontColorBtn').textContent = '🎨 ' + FONT_COLOR_NAMES[colorIdx];
         }
