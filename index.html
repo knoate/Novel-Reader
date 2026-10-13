@@ -111,7 +111,11 @@
                     <span class="reader-toolbar" style="display:inline-flex;gap:4px;">
                         <button id="fontDecBtn" title="缩小字号">A-</button>
                         <button id="fontIncBtn" title="放大字号">A+</button>
+                        <button id="fontFamilyBtn" title="切换字体（长按导入自定义字体）">🔤 字体</button>
+                        <button id="fontColorBtn" title="设置字体颜色">🎨 字色</button>
                         <button id="themeBtn" title="切换阅读主题">🌙 夜间</button>
+                        <button id="bgBtn" title="设置背景图">🖼️ 背景</button>
+                        <input type="file" id="bgFile" accept="image/*" style="display:none;">
                     </span>
                     <button id="aiIllustratorBtn" style="background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;">🎨 配图工具</button>
                     <button onclick="location.href='/stats.html'" style="background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;">📊 统计</button>
@@ -359,6 +363,12 @@
                 <div class="chapter-title">${escapeHtml(title)}</div>
                 <div class="chapter-content">${content}</div>
             `;
+            if (readerSettings.fontFamily) {
+                contentArea.querySelector('.chapter-content').style.fontFamily = readerSettings.fontFamily;
+            }
+            if (readerSettings.fontColor) {
+                contentArea.querySelector('.chapter-content').style.color = readerSettings.fontColor;
+            }
 
             // 保持提示词显示状态
             const toggleBtn = document.getElementById('togglePromptsBtn');
@@ -743,16 +753,16 @@
                     return;
                 }
 
-                // === 第二步：逐张生图 ===
+                // === 第二步：并发生图（最多3张同时） ===
                 let insertedCount = 0, failedCount = 0;
-                for (let i = 0; i < scenes.length; i++) {
+                const CONCURRENCY = 3;
+                const results = new Array(scenes.length);
+
+                async function genOne(i) {
                     const scene = scenes[i];
                     const sceneLabel = scene.scene || `场景 ${i+1}`;
                     const promptText = scene.prompt || '（无提示词）';
-                    progressTitle.textContent = `🎨 生图 ${i+1}/${scenes.length}`;
                     logLine(`⏳ 场景 ${i+1}/${scenes.length}: ${sceneLabel.slice(0,20)}...`);
-
-                    let imageUrl = null;
                     const ts0 = Date.now();
                     try {
                         const genR = await fetch(`${API_BASE}/api/generate-scene`, {
@@ -766,43 +776,53 @@
                         });
                         const genData = await genR.json();
                         if (!genR.ok || !genData.success) throw new Error(genData.error || '生成失败');
-                        imageUrl = genData.image?.url || genData.image;
+                        const imageUrl = genData.image?.url || genData.image;
                         const ts = Date.now() - ts0;
-                        logLine(`  ✅ 成功（${t(ts)}）`);
+                        logLine(`  ✅ 场景${i+1}成功（${t(ts)}）`);
+                        results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '' };
                         insertedCount++;
                     } catch (sceneErr) {
                         if (sceneErr.name === 'AbortError') throw sceneErr;
                         const ts = Date.now() - ts0;
-                        logLine(`  ❌ 失败（${t(ts)}）: ${(sceneErr.message||'').slice(0,80)}`);
+                        logLine(`  ❌ 场景${i+1}失败（${t(ts)}）: ${(sceneErr.message||'').slice(0,80)}`);
+                        results[i] = { ok: false, error: sceneErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '' };
                         failedCount++;
-                        // 失败占位
-                        const failId = 'fail-' + Date.now() + '-' + Math.floor(Math.random()*10000);
-                        const errHtml = `<div style="font-size:12px;color:#f87171;background:#2a1414;padding:6px 8px;border-radius:4px;margin-bottom:8px;">❌ ${escapeHtml(sceneErr.message||'')}</div>`;
-                        let insertPos = ch.content.length;
-                        if (scene.anchor && scene.anchor.trim()) {
-                            const pos = ch.content.indexOf(scene.anchor.trim());
-                            if (pos !== -1) { let e = ch.content.indexOf('\n\n', pos+scene.anchor.trim().length); if (e===-1) e=ch.content.indexOf('\n',pos+scene.anchor.trim().length); if(e===-1) e=ch.content.length; insertPos=e; }
-                        }
-                        ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(promptText)}" data-label="${escapeHtml(sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
-                        continue;
                     }
+                }
 
-                    // 成功：插入图片
+                // 分批并发
+                for (let batch = 0; batch < scenes.length; batch += CONCURRENCY) {
+                    const batchIdx = [];
+                    for (let j = batch; j < Math.min(batch + CONCURRENCY, scenes.length); j++) batchIdx.push(j);
+                    progressTitle.textContent = `🎨 生图 ${batch + 1}-${batchIdx.length + batch}/${scenes.length}`;
+                    await Promise.all(batchIdx.map(i => genOne(i)));
+                }
+
+                // === 第三步：统一插入结果到章节 ===
+                for (let i = 0; i < results.length; i++) {
+                    const r = results[i];
+                    if (!r) continue;
                     let insertPos = ch.content.length;
-                    if (scene.anchor && scene.anchor.trim()) {
-                        const anchor = scene.anchor.trim();
+                    if (r.anchor && r.anchor.trim()) {
+                        const anchor = r.anchor.trim();
                         const pos = ch.content.indexOf(anchor);
                         if (pos !== -1) {
                             let e = ch.content.indexOf('\n\n', pos+anchor.length);
-                            if (e===-1) e=ch.content.indexOf('\n', pos+anchor.length);
+                            if (e===-1) e=ch.content.indexOf('\n',pos+anchor.length);
                             if(e===-1) e=ch.content.length;
                             insertPos = e;
                         }
                     }
-                    const infoHtml = `<div class="prompt-text"><div>📝 场景：${escapeHtml(sceneLabel)}</div><div>📌 提示词：${escapeHtml(promptText)}</div></div>`;
-                    ch.content = ch.content.slice(0, insertPos) + `\n\n---\n![${escapeHtml(sceneLabel)}](${imageUrl})\n${infoHtml}\n---\n` + ch.content.slice(insertPos);
-                    saveCurrentChapter();
+                    if (r.ok) {
+                        const infoHtml = `<div class="prompt-text"><div>📝 场景：${escapeHtml(r.sceneLabel)}</div><div>📌 提示词：${escapeHtml(r.promptText)}</div></div>`;
+                        ch.content = ch.content.slice(0, insertPos) + `\n\n---\n![${escapeHtml(r.sceneLabel)}](${r.imageUrl})\n${infoHtml}\n---\n` + ch.content.slice(insertPos);
+                    } else {
+                        const failId = 'fail-' + Date.now() + '-' + i;
+                        const errHtml = `<div style="font-size:12px;color:#f87171;background:#2a1414;padding:6px 8px;border-radius:4px;margin-bottom:8px;">❌ ${escapeHtml(r.error)}</div>`;
+                        ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(r.promptText)}" data-label="${escapeHtml(r.sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(r.sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(r.promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
+                    }
                 }
+                saveCurrentChapter();
 
                 ch._aiProcessed = true;
                 ch.wordCount = ch.content.length;
@@ -1114,6 +1134,9 @@
 
         function applyReaderSettings() {
             document.documentElement.style.setProperty('--reader-font-size', readerSettings.fontSize + 'px');
+            if (readerSettings.fontFamily) {
+                document.querySelector('.chapter-content').style.fontFamily = readerSettings.fontFamily;
+            }
             document.body.classList.remove('theme-day', 'theme-sepia');
             if (readerSettings.theme === 'day') document.body.classList.add('theme-day');
             else if (readerSettings.theme === 'sepia') document.body.classList.add('theme-sepia');
@@ -1132,6 +1155,117 @@
             readerSettings.theme = readerSettings.theme === 'dark' ? 'day'
                 : readerSettings.theme === 'day' ? 'sepia' : 'dark';
             applyReaderSettings();
+        };
+
+        // 字体切换
+        const FONT_LIST = [
+            { name: '默认', css: '' },
+            { name: '宋体', css: 'SimSun, serif' },
+            { name: '微软雅黑', css: 'Microsoft YaHei, sans-serif' },
+            { name: '楷体', css: 'KaiTi, KaiTi_GB2312, serif' },
+            { name: '黑体', css: 'SimHei, sans-serif' },
+            { name: '思源宋体', css: '"Source Han Serif CN", "Noto Serif CJK SC", serif' },
+            { name: '圆体', css: 'Yuanti SC, YouYuan, "Microsoft YaHei", sans-serif' },
+        ];
+        let fontIdx = 0;
+        try { fontIdx = FONT_LIST.findIndex(f => f.css === (readerSettings.fontFamily || '')); } catch (e) {}
+        if (fontIdx < 0) fontIdx = 0;
+        document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
+        document.getElementById('fontFamilyBtn').onclick = () => {
+            fontIdx = (fontIdx + 1) % FONT_LIST.length;
+            readerSettings.fontFamily = FONT_LIST[fontIdx].css;
+            document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
+            applyReaderSettings();
+        };
+
+        // 字体颜色
+        const FONT_COLORS = ['', '#e0e0e0', '#ffd866', '#a8e6cf', '#ffb3b3', '#b3c6ff', '#d4a5ff', '#ffffff'];
+        const FONT_COLOR_NAMES = ['默认', '亮白', '暖黄', '浅绿', '浅粉', '浅蓝', '浅紫', '纯白'];
+        let colorIdx = 0;
+        try { colorIdx = FONT_COLORS.indexOf(readerSettings.fontColor || ''); } catch (e) {}
+        if (colorIdx < 0) colorIdx = 0;
+        function applyFontColor() {
+            const c = FONT_COLORS[colorIdx];
+            const el = document.querySelector('.chapter-content');
+            if (el) el.style.color = c || '';
+            document.getElementById('fontColorBtn').textContent = '🎨 ' + FONT_COLOR_NAMES[colorIdx];
+        }
+        document.getElementById('fontColorBtn').onclick = () => {
+            colorIdx = (colorIdx + 1) % FONT_COLORS.length;
+            readerSettings.fontColor = FONT_COLORS[colorIdx];
+            applyFontColor();
+            applyReaderSettings();
+        };
+
+        // 导入自定义字体
+        const fontFile = document.createElement('input');
+        fontFile.type = 'file';
+        fontFile.accept = '.ttf,.otf,.woff,.woff2';
+        fontFile.style.display = 'none';
+        document.body.appendChild(fontFile);
+        fontFile.onchange = (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const fontName = 'custom_' + Date.now();
+                const style = document.createElement('style');
+                style.textContent = `@font-face { font-family: '${fontName}'; src: url(${ev.target.result}); }`;
+                document.head.appendChild(style);
+                readerSettings.fontFamily = `'${fontName}', serif`;
+                readerSettings.customFontName = f.name;
+                document.getElementById('fontFamilyBtn').textContent = '🔤 ' + f.name.slice(0, 10);
+                applyReaderSettings();
+                showToast('✅ 自定义字体已加载: ' + f.name);
+            };
+            reader.readAsDataURL(f);
+        };
+        // 长按字体按钮导入自定义字体
+        let fontBtnTimer = null;
+        document.getElementById('fontFamilyBtn').addEventListener('mousedown', () => {
+            fontBtnTimer = setTimeout(() => { fontFile.click(); }, 600);
+        });
+        document.getElementById('fontFamilyBtn').addEventListener('mouseup', () => { clearTimeout(fontBtnTimer); });
+        document.getElementById('fontFamilyBtn').addEventListener('mouseleave', () => { clearTimeout(fontBtnTimer); });
+
+        // 背景图设置
+        function applyBg() {
+            const bg = readerSettings.bgImage || '';
+            const content = document.querySelector('.main-content');
+            if (bg && content) {
+                content.style.backgroundImage = `url(${bg})`;
+                content.style.backgroundSize = 'cover';
+                content.style.backgroundPosition = 'center';
+                content.style.backgroundAttachment = 'fixed';
+                content.style.backgroundColor = 'rgba(15,15,26,0.82)';
+                content.style.backgroundBlendMode = 'normal';
+                content.style.cursor = 'default';
+            } else if (content) {
+                content.style.backgroundImage = '';
+                content.style.backgroundAttachment = '';
+                content.style.backgroundColor = '';
+                content.style.cursor = '';
+            }
+        }
+        document.getElementById('bgBtn').onclick = () => {
+            const cur = readerSettings.bgImage;
+            const choice = prompt(cur ? '输入背景图URL，或留空清除；确定上传本地图片请输入"file"' : '输入背景图URL，或输入"file"上传本地图片');
+            if (choice === null) return;
+            if (choice === 'file') { document.getElementById('bgFile').click(); return; }
+            if (choice === '') { readerSettings.bgImage = ''; }
+            else { readerSettings.bgImage = choice.trim(); }
+            applyReaderSettings(); applyBg();
+        };
+        document.getElementById('bgFile').onchange = (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                readerSettings.bgImage = ev.target.result;
+                applyReaderSettings(); applyBg();
+                showToast('🖼️ 背景图已设置');
+            };
+            reader.readAsDataURL(f);
         };
 
         function saveProgress() {
@@ -1297,6 +1431,10 @@
         }
 
         applyReaderSettings();
+        applyBg();
+        if (readerSettings.customFontName) {
+            document.getElementById('fontFamilyBtn').textContent = '🔤 ' + readerSettings.customFontName.slice(0, 10);
+        }
         (async () => {
             await loadNovels();
             const loaded = await loadChaptersFromServer();
