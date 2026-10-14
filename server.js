@@ -118,15 +118,24 @@ function extractScenesJson(text) {
     return JSON.parse(m ? m[0] : candidate);
 }
 
-async function callLlm(prompt, model, signal) {
+async function callLlm(prompt, model, signal, opts = {}) {
     const useModel = model || process.env.LLM_MODEL || 'gpt-4';
-    const res = await axios.post(LLM_API_URL, {
+    const apiUrl = opts.apiUrl || LLM_API_URL;
+    const apiKey = opts.apiKey || LLM_API_KEY;
+    // 智能补全 chat/completions 路径
+    let chatUrl = apiUrl.replace(/\/+$/, '');
+    if (!/\/chat\/completions$/.test(chatUrl)) {
+        if (/\/v\d+$/.test(chatUrl)) chatUrl = chatUrl + '/chat/completions';
+        else if (!/\/v\d+\//.test(chatUrl)) chatUrl = chatUrl + '/v1/chat/completions';
+    }
+    console.log('🤖 LLM 请求:', chatUrl, '模型:', useModel);
+    const res = await axios.post(chatUrl, {
         model: useModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
     }, {
-        headers: { 'Authorization': `Bearer ${LLM_API_KEY}`, 'Content-Type': 'application/json' },
-        timeout: 60000,
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: 120000,
         signal
     });
     return res.data.choices[0].message.content;
@@ -141,7 +150,7 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 只输出 JSON 数组，不要任何解释：
 [{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文定位句"}]`;
 
-async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal) {
+async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal, opts = {}) {
     if (!LLM_API_KEY) {
         return [
             { scene: '主角站在山巅眺望远方', prompt: 'A lone figure standing on a mountain peak, overlooking a vast fantasy landscape, dramatic sunset lighting, epic scale, digital art, high quality', anchor: '主角站在山巅，目光投向远方' },
@@ -154,7 +163,7 @@ async function analyzeChapters(title, content, model, instruction = '', maxScene
     const allScenes = [];
     for (let i = 0; i < chunks.length; i++) {
         try {
-            const text = await callLlm(`${ANALYZE_SYSTEM}${sysExtra}\n\n章节标题：${title || ''}\n章节片段（${i + 1}/${chunks.length}）：\n${chunks[i]}`, model, signal);
+            const text = await callLlm(`${ANALYZE_SYSTEM}${sysExtra}\n\n章节标题：${title || ''}\n章节片段（${i + 1}/${chunks.length}）：\n${chunks[i]}`, model, signal, opts);
             const arr = extractScenesJson(text);
             if (Array.isArray(arr)) allScenes.push(...arr);
         } catch (e) {
@@ -617,7 +626,11 @@ app.post('/api/analyze-only', async (req, res) => {
     try {
         const { title, content, model, analyzeTemplate, maxScenes } = req.body;
         if (!content) return res.status(400).json({ error: '缺少章节内容' });
-        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5, ctrl.signal);
+        const opts = {
+            apiUrl: req.body.llmApiUrl || '',
+            apiKey: req.body.llmApiKey || ''
+        };
+        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5, ctrl.signal, opts);
         res.json({ success: true, scenes });
     } catch (e) {
         if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
@@ -742,14 +755,28 @@ app.post('/api/llm-models', async (req, res) => {
     try {
         const { apiUrl, apiKey } = req.body;
         if (!apiUrl || !apiKey) return res.json({ success: true, models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'deepseek-chat', 'deepseek-coder', 'claude-3-opus', 'claude-3-sonnet'], _default: true });
-        const modelsUrl = apiUrl.replace(/\/chat\/completions$/, '/models');
+        // 智能拼接 models URL
+        let modelsUrl;
+        if (/\/chat\/completions$/.test(apiUrl)) {
+            modelsUrl = apiUrl.replace(/\/chat\/completions$/, '/models');
+        } else if (/\/v1$/.test(apiUrl)) {
+            modelsUrl = apiUrl + '/models';
+        } else if (/\/models$/.test(apiUrl)) {
+            modelsUrl = apiUrl;
+        } else {
+            // 基础域名，补 /v1/models
+            modelsUrl = apiUrl.replace(/\/+$/, '') + '/v1/models';
+        }
+        console.log('📥 获取模型列表:', modelsUrl);
         const r = await axios.get(modelsUrl, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10000 });
         const models = Array.isArray(r.data?.data) ? r.data.data.map(m => m.id)
             : Array.isArray(r.data?.models) ? r.data.models
             : [];
+        console.log('📥 获取到模型:', models);
         res.json({ success: true, models: models.length ? models : ['gpt-4', 'gpt-3.5-turbo'], _default: !models.length });
-    } catch {
-        res.json({ success: true, models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'deepseek-chat', 'deepseek-coder'], _default: true });
+    } catch (e) {
+        console.warn('📥 获取模型失败:', e.message);
+        res.json({ success: true, models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'deepseek-chat', 'deepseek-coder'], _default: true, error: e.message });
     }
 });
 

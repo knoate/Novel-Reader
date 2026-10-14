@@ -42,12 +42,18 @@
         }
 
         /* 阅读器外观：字号 / 主题 */
+        * { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         .content-area .chapter-content {
             font-size: var(--reader-font-size, 17px);
             line-height: 2;
             transition: font-size .15s ease;
             color: var(--reader-color, inherit);
             font-family: var(--reader-font-family, inherit);
+        }
+        .content-area .chapter-content p, .content-area .chapter-content div, .content-area .chapter-content span {
+            font-size: inherit;
+            color: inherit;
+            font-family: inherit;
         }
         body.theme-day { background: #f5f1e8; }
         body.theme-day .main-content, body.theme-day .content-area { background: #faf7f0; color: #2c2a26; }
@@ -729,9 +735,10 @@
                 logLine('⏳ 正在分析章节、提取场景...');
                 const t0 = Date.now();
                 const maxScenes = parseInt(document.getElementById('maxScenesInput').value) || 5;
+                const llmCfg = (loadApiConfig() || {}).llm || {};
                 const analyzeR = await fetch(`${API_BASE}/api/analyze-only`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate: '', maxScenes }),
+                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate: '', maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '' }),
                     signal: aiAbortController.signal
                 });
                 if (!analyzeR.ok) throw new Error(`分析失败 HTTP ${analyzeR.status}`);
@@ -1130,6 +1137,13 @@
             document.documentElement.style.setProperty('--reader-font-size', readerSettings.fontSize + 'px');
             document.documentElement.style.setProperty('--reader-color', readerSettings.fontColor || '');
             document.documentElement.style.setProperty('--reader-font-family', readerSettings.fontFamily || '');
+            // 直接内联设置，确保手机端也生效
+            const cc = document.querySelector('.chapter-content');
+            if (cc) {
+                cc.style.fontSize = readerSettings.fontSize + 'px';
+                if (readerSettings.fontColor) cc.style.color = readerSettings.fontColor;
+                if (readerSettings.fontFamily) cc.style.fontFamily = readerSettings.fontFamily;
+            }
             document.body.classList.remove('theme-day', 'theme-sepia');
             if (readerSettings.theme === 'day') document.body.classList.add('theme-day');
             else if (readerSettings.theme === 'sepia') document.body.classList.add('theme-sepia');
