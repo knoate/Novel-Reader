@@ -119,6 +119,7 @@
                     <button id="fontColorBtn" onclick="cycleColor()" title="设置字体颜色" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🎨 字色</button>
                     <button id="themeBtn" title="切换阅读主题" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🌙 夜间</button>
                     <button id="bgBtn" title="设置背景图" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">🖼️ 背景</button>
+                    <button id="readToggleBtn" onclick="toggleRead(currentIndex)" title="标记已读/未读" style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5e;padding:4px 8px;border-radius:5px;font-size:13px;">⭕ 未读</button>
                     <input type="file" id="bgFile" accept="image/*" style="display:none;">
                     <button id="toolsToggleBtn" style="background:#2a2a4a;color:#888;border:1px solid #888;">🛠️ ▾</button>
                     <span id="secondaryTools" style="display:none;flex-wrap:wrap;gap:4px;width:100%;margin-top:4px;">
@@ -287,9 +288,11 @@
                 html += `
                     <div class="chapter-item-sidebar ${active} ${readCls}" data-index="${i}">
                         <span class="num">${i + 1}</span>
-                        <span style="font-size:11px;">${dot}</span>
+                        <span style="font-size:11px;cursor:pointer;" onclick="event.stopPropagation();toggleRead(${i})" title="点击切换已读/未读">${dot}</span>
                         <span class="title">${escapeHtml(title)}</span>
                         <span class="word-count">${ch.wordCount || ch.content?.length || 0}</span>
+                        <span style="font-size:11px;cursor:pointer;padding:0 2px;color:#666;" onclick="event.stopPropagation();moveChapter(${i},-1)" title="上移">↑</span>
+                        <span style="font-size:11px;cursor:pointer;padding:0 2px;color:#666;" onclick="event.stopPropagation();moveChapter(${i},1)" title="下移">↓</span>
                         <span class="del-chapter" data-index="${i}" title="删除本章" style="cursor:pointer;color:#666;font-size:14px;padding:0 4px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#666'">✕</span>
                     </div>
                 `;
@@ -402,6 +405,45 @@
             if (!ch) return false;
             return getReadSet().has(ch._id || ('idx_' + i));
         }
+        function toggleRead(i) {
+            const ch = chapters[i];
+            if (!ch) return;
+            const id = ch._id || ('idx_' + i);
+            const key = 'novel_reader_read_' + (currentNovelId || 'default');
+            const s = getReadSet();
+            if (s.has(id)) s.delete(id); else s.add(id);
+            localStorage.setItem(key, JSON.stringify([...s]));
+            renderSidebar();
+            updateReadBtn();
+        }
+        async function moveChapter(i, dir) {
+            const j = i + dir;
+            if (j < 0 || j >= chapters.length) return;
+            [chapters[i], chapters[j]] = [chapters[j], chapters[i]];
+            if (currentIndex === i) currentIndex = j;
+            else if (currentIndex === j) currentIndex = i;
+            renderSidebar();
+            renderContent();
+            updateReadBtn();
+            // 通知后端重排
+            try {
+                await fetch(`${API_BASE}/api/chapters/reorder`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ novelId: currentNovelId, order: chapters.map(c => c._id) })
+                });
+            } catch (e) {}
+        }
+        function updateReadBtn() {
+            const btn = document.getElementById('readToggleBtn');
+            if (!btn) return;
+            if (isRead(currentIndex)) {
+                btn.textContent = '✅ 已读';
+                btn.style.color = '#4ade80';
+            } else {
+                btn.textContent = '⭕ 未读';
+                btn.style.color = '#e0e0e0';
+            }
+        }
         function selectChapter(index) {
             if (index < 0 || index >= chapters.length) return;
             accumulateReadTime();
@@ -410,6 +452,7 @@
             renderContent();
             contentArea.scrollTop = 0;
             saveProgress();
+            updateReadBtn();
         }
 
         // 阅读时长统计
@@ -1453,6 +1496,7 @@
             }
             renderSidebar();
             renderContent();
+            updateReadBtn();
             // 恢复阅读进度
             try {
                 const prog = JSON.parse(localStorage.getItem('novel_reader_progress') || 'null');

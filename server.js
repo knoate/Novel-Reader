@@ -492,6 +492,24 @@ app.post('/api/chapters', (req, res) => {
     saveJson(CHAPTERS_FILE, chapters);
     res.json({ success: true, chapter });
 });
+
+// 章节排序
+app.post('/api/chapters/reorder', (req, res) => {
+    const { novelId, order } = req.body;
+    if (!Array.isArray(order)) return res.json({ success: false, error: 'order 必须是数组' });
+    const map = new Map(chapters.map(c => [c.id, c]));
+    const kept = [];
+    for (const id of order) {
+        const ch = map.get(id);
+        if (ch) kept.push(ch);
+    }
+    // 保留不在 order 里的章节（其他小说的）
+    const others = chapters.filter(c => !order.includes(c.id));
+    chapters.length = 0;
+    chapters.push(...kept, ...others);
+    saveJson(CHAPTERS_FILE, chapters);
+    res.json({ success: true });
+});
 // 删除本地图片文件（如果是 /images/ 开头的本地路径）
 function deleteLocalImage(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('/images/')) return;

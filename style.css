@@ -519,6 +519,11 @@ body {
         padding: 3px 4px !important;
         font-size: 11px !important;
     }
+    /* 手机端侧边栏加宽，隐藏字数 */
+    .sidebar { width: 320px !important; min-width: 320px !important; }
+    .chapter-item-sidebar .word-count { display: none; }
+    .chapter-item-sidebar { padding: 8px 8px; }
+    .chapter-item-sidebar .num { min-width: 28px; font-size: 11px; }
 
     #novelSelect {
         font-size: 15px !important;
