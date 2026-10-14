@@ -379,6 +379,16 @@
                 <span class="badge" id="llmBadge" class="badge-unknown">未配置</span>
             </div>
             <div class="form-group">
+                <label>配置方案</label>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <select id="llmProfileSelect" style="flex:1;padding:8px;border-radius:6px;border:1px solid #3a3a5e;background:#1a1a2e;color:#e0e0e0;">
+                        <option value="">— 选择已保存的方案 —</option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm" id="saveLlmProfileBtn" title="把当前设置保存为命名方案">💾 存为方案</button>
+                    <button class="btn btn-secondary btn-sm" id="delLlmProfileBtn" title="删除当前方案" style="color:#f87171;">🗑️ 删除</button>
+                </div>
+            </div>
+            <div class="form-group">
                 <label>API Key</label>
                 <input type="password" id="llmApiKey" placeholder="输入你的 LLM API Key...">
                 <div class="hint">支持 OpenAI、DeepSeek、火山引擎等兼容接口</div>
@@ -941,11 +951,80 @@
         });
 
         // ============================================================
+        //  8.5 LLM 配置方案（多套保存/切换）
+        // ============================================================
+        const PROFILES_KEY = 'llm_profiles';
+        const ACTIVE_PROFILE_KEY = 'llm_active_profile';
+
+        function loadProfiles() {
+            try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '{}'); }
+            catch (e) { return {}; }
+        }
+        function saveProfiles(p) {
+            localStorage.setItem(PROFILES_KEY, JSON.stringify(p));
+        }
+        function refreshProfileSelect() {
+            const sel = document.getElementById('llmProfileSelect');
+            const profiles = loadProfiles();
+            const active = localStorage.getItem(ACTIVE_PROFILE_KEY) || '';
+            sel.innerHTML = '<option value="">— 选择已保存的方案 —</option>';
+            for (const name of Object.keys(profiles)) {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                if (name === active) opt.selected = true;
+                sel.appendChild(opt);
+            }
+        }
+        // 切换方案
+        document.getElementById('llmProfileSelect').addEventListener('change', (e) => {
+            const name = e.target.value;
+            if (!name) return;
+            const profiles = loadProfiles();
+            const p = profiles[name];
+            if (!p) return;
+            document.getElementById('llmApiKey').value = p.apiKey || '';
+            document.getElementById('llmApiUrl').value = p.apiUrl || '';
+            document.getElementById('llmModel').value = p.model || '';
+            localStorage.setItem(ACTIVE_PROFILE_KEY, name);
+            saveConfig();
+            showToast(`✅ 已切换到「${name}」`, 'success');
+        });
+        // 保存当前为方案
+        document.getElementById('saveLlmProfileBtn').addEventListener('click', () => {
+            const name = prompt('给这个配置起个名字：');
+            if (!name || !name.trim()) return;
+            const profiles = loadProfiles();
+            profiles[name.trim()] = {
+                apiKey: document.getElementById('llmApiKey').value.trim(),
+                apiUrl: document.getElementById('llmApiUrl').value.trim(),
+                model: document.getElementById('llmModel').value.trim()
+            };
+            saveProfiles(profiles);
+            localStorage.setItem(ACTIVE_PROFILE_KEY, name.trim());
+            refreshProfileSelect();
+            showToast(`💾 已保存方案「${name.trim()}」`, 'success');
+        });
+        // 删除方案
+        document.getElementById('delLlmProfileBtn').addEventListener('click', () => {
+            const name = document.getElementById('llmProfileSelect').value;
+            if (!name) { showToast('⚠️ 请先选择要删除的方案', 'warn'); return; }
+            if (!confirm(`确定删除方案「${name}」吗？`)) return;
+            const profiles = loadProfiles();
+            delete profiles[name];
+            saveProfiles(profiles);
+            localStorage.removeItem(ACTIVE_PROFILE_KEY);
+            refreshProfileSelect();
+            showToast(`🗑️ 已删除「${name}」`, 'success');
+        });
+
+        // ============================================================
         //  9. 初始化
         // ============================================================
 
         const config = loadConfig();
         renderConfig(config);
+        refreshProfileSelect();
         console.log('⚙️ API 配置中心已加载');
 
         if (config.comfyui.url) {
