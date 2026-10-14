@@ -390,7 +390,10 @@
             </div>
             <div class="form-group">
                 <label>API Key</label>
-                <input type="password" id="llmApiKey" placeholder="输入你的 LLM API Key...">
+                <div style="display:flex; gap:6px;">
+                    <input type="password" id="llmApiKey" placeholder="输入你的 LLM API Key..." style="flex:1;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="toggleLlmKeyBtn" title="显示/隐藏" style="white-space:nowrap;">👁️</button>
+                </div>
                 <div class="hint">支持 OpenAI、DeepSeek、火山引擎等兼容接口</div>
             </div>
             <div class="form-group">
@@ -682,7 +685,12 @@
 
         async function testLlm() {
             const apiKey = document.getElementById('llmApiKey').value.trim();
-            const apiUrl = document.getElementById('llmApiUrl').value.trim();
+            let apiUrl = document.getElementById('llmApiUrl').value.trim().replace(/\/+$/, '');
+            // 智能补全 chat/completions 路径
+            if (!/\/chat\/completions$/.test(apiUrl)) {
+                if (/\/v\d+$/.test(apiUrl)) apiUrl = apiUrl + '/chat/completions';
+                else if (!/\/v\d+\//.test(apiUrl)) apiUrl = apiUrl + '/v1/chat/completions';
+            }
             const badge = document.getElementById('llmBadge');
 
             if (!apiKey) {
@@ -695,6 +703,7 @@
 
             try {
                 const model = document.getElementById('llmModel').value.trim() || 'gpt-4';
+                console.log('🧪 测试连接:', apiUrl, '模型:', model);
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
@@ -948,6 +957,12 @@
                 clearTimeout(saveTimer);
                 saveTimer = setTimeout(saveConfig, 500);
             });
+        });
+
+        // 显示/隐藏 API Key
+        document.getElementById('toggleLlmKeyBtn').addEventListener('click', () => {
+            const inp = document.getElementById('llmApiKey');
+            inp.type = inp.type === 'password' ? 'text' : 'password';
         });
 
         // ============================================================
