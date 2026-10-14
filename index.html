@@ -816,12 +816,12 @@
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(r.promptText)}" data-label="${escapeHtml(r.sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(r.sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(r.promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
                     }
                 }
-                saveCurrentChapter();
+                await saveCurrentChapter();
 
                 ch._aiProcessed = true;
                 ch.wordCount = ch.content.length;
                 renderContent();
-                saveCurrentChapter();
+                await saveCurrentChapter();
                 progressTitle.textContent = '✅ 完成';
                 logLine(`📊 共 ${scenes.length} 场景，成功 ${insertedCount}，失败 ${failedCount}，总耗时 ${t(Date.now()-t0)}`);
                 if (insertedCount > 0 && failedCount === 0) showToast(`✅ 已生成 ${insertedCount} 张配图`);
@@ -1412,15 +1412,18 @@
         async function saveCurrentChapter() {
             if (currentIndex < 0 || !chapters[currentIndex]) return;
             const ch = chapters[currentIndex];
-            console.log('💾 保存章节:', { id: ch._id, title: ch.title, contentLen: ch.content?.length, hasImage: ch.content?.includes('![') });
             try {
                 const r = await fetch(`${API_BASE}/api/chapters`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: ch._id, title: ch.title, content: ch.content, novelId: currentNovelId })
                 });
                 const data = await r.json();
-                console.log('💾 保存结果:', data);
-            } catch (e) { console.warn('保存章节失败:', e); }
+                if (data.success && data.chapter) {
+                    ch._id = data.chapter.id;
+                } else {
+                    showToast('⚠️ 保存失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) { console.warn('保存章节失败:', e); showToast('⚠️ 网络错误，章节未保存'); }
         }
 
         applyReaderSettings();
