@@ -785,6 +785,13 @@
                     ...getAnalyzerRule()
                 };
                 if (engine === 'grok') Object.assign(requestBody, getGrokConfig());
+                if (engine === 'novelai') {
+                    Object.assign(requestBody, {
+                        apiUrl: config.novelai?.apiUrl || '',
+                        apiKey: config.novelai?.apiKey || '',
+                        model: config.novelai?.model || 'nai-diffusion-5-full'
+                    });
+                }
 
                 // ✅ 如果是 ComfyUI，传递 workflowConfig
                 if (engine === 'comfyui' && workflowConfig) {
@@ -1051,6 +1058,38 @@
             };
         }
 
+        // ✅ NovelAI 配置自动保存（同步到 api_config.novelai）
+        const naiUrlEl = document.getElementById('naiUrl');
+        const naiKeyEl = document.getElementById('naiKey');
+        const naiModelEl = document.getElementById('naiModel');
+        function loadNaiConfig() {
+            try {
+                const cfg = loadApiConfig() || {};
+                const n = cfg.novelai || {};
+                if (naiUrlEl) naiUrlEl.value = n.apiUrl || '';
+                if (naiKeyEl) naiKeyEl.value = n.apiKey || '';
+                if (naiModelEl) naiModelEl.value = n.model || 'novelai';
+            } catch (e) {}
+        }
+        function saveNaiConfig() {
+            try {
+                const cfg = loadApiConfig() || {};
+                const n = cfg.novelai || {};
+                n.apiUrl = naiUrlEl ? naiUrlEl.value.trim() : '';
+                n.apiKey = naiKeyEl ? naiKeyEl.value.trim() : '';
+                n.model = naiModelEl ? naiModelEl.value.trim() : 'novelai';
+                cfg.novelai = n;
+                localStorage.setItem('api_config', JSON.stringify(cfg));
+            } catch (e) {}
+        }
+        if (naiUrlEl && naiKeyEl && naiModelEl) {
+            [naiUrlEl, naiKeyEl, naiModelEl].forEach(el => {
+                el.addEventListener('input', saveNaiConfig);
+                el.addEventListener('change', saveNaiConfig);
+            });
+        }
+        loadNaiConfig();
+
         function syncGrokVisibility() {
             const v = engineSelect.value;
             if (grokCard) grokCard.style.display = v === 'grok' ? '' : 'none';
@@ -1150,17 +1189,8 @@
                 const img = list.find(id => /image|dall|gpt-image|flux|sd|nai|novel|grok/i.test(id));
                 if (img) { grokModel.value = img; saveGrokConfig(); }
                 // 渲染可点击的小标签
-                const chips = document.getElementById('grokModelChips');
-                if (chips) {
-                    chips.innerHTML = '';
-                    list.forEach(id => {
-                        const c = document.createElement('span');
-                        c.textContent = id;
-                        c.style.cssText = 'padding:4px 10px;background:#2a2a4a;color:#c0c0d0;border:1px solid #3a3a5a;border-radius:14px;font-size:12px;cursor:pointer;';
-                        c.onclick = () => { grokModel.value = id; saveGrokConfig(); };
-                        chips.appendChild(c);
-                    });
-                }
+                window._grokModelList = list;
+                renderGrokChips();
                 showToast(`✅ 拉取到 ${list.length} 个模型，已选: ${img || list[0]}`, 'success');
             } catch (e) {
                 showToast('❌ 拉取失败: ' + e.message, 'error');
@@ -1169,6 +1199,30 @@
                 btn.textContent = oldText;
             }
         });
+
+        function renderGrokChips() {
+            const list = window._grokModelList || [];
+            if (!list.length) return;
+            const q = (grokModel.value || '').toLowerCase();
+            const chips = document.getElementById('grokModelChips');
+            if (!chips) return;
+            chips.innerHTML = '';
+            const filtered = q ? list.filter(id => id.toLowerCase().includes(q)) : list;
+            // 匹配的排前面
+            filtered.sort((a, b) => {
+                const ai = a.toLowerCase().indexOf(q);
+                const bi = b.toLowerCase().indexOf(q);
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+            });
+            filtered.forEach(id => {
+                const c = document.createElement('span');
+                c.textContent = id;
+                c.style.cssText = 'padding:4px 10px;background:#2a2a4a;color:#c0c0d0;border:1px solid #3a3a5a;border-radius:14px;font-size:12px;cursor:pointer;';
+                c.onclick = () => { grokModel.value = id; saveGrokConfig(); renderGrokChips(); };
+                chips.appendChild(c);
+            });
+        }
+        grokModel.addEventListener('input', renderGrokChips);
 
         // 生成时记录配置（在 generateBtn 里也会更新）
         function getCurrentRunConfig() {

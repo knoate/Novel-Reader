@@ -878,26 +878,20 @@
             statusDetail.textContent = '检测中...';
 
             try {
-                const res = await fetch(`${url}/system_stats`, {
-                    signal: AbortSignal.timeout(5000)
+                const res = await fetch(`/api/comfyui-status?url=${encodeURIComponent(url)}`, {
+                    signal: AbortSignal.timeout(10000)
                 });
-                if (res.ok) {
-                    const data = await res.json();
+                const data = await res.json();
+                if (data.success) {
                     statusDot.className = 'dot online';
                     statusText.textContent = '🟢 已连接';
                     statusDetail.textContent = '在线';
-                    modelInfo.textContent = data.devices?.[0]?.name || '未知';
-                    try {
-                        const queueRes = await fetch(`${url}/queue`);
-                        if (queueRes.ok) {
-                            const queueData = await queueRes.json();
-                            queueInfo.textContent = queueData.queue_running?.length || 0;
-                        }
-                    } catch (e) {}
+                    modelInfo.textContent = data.device || '未知';
+                    queueInfo.textContent = data.queue || 0;
                     showToast('✅ ComfyUI 连接成功', 'success');
                     return true;
                 } else {
-                    throw new Error(`HTTP ${res.status}`);
+                    throw new Error(data.error || '连接失败');
                 }
             } catch (error) {
                 statusDot.className = 'dot offline';

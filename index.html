@@ -134,6 +134,7 @@
                         <button id="comfyTestBtn" style="background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;">🧪 测试</button>
                         <button id="novelaiTestBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI</button>
                         <button id="novelaiApiBtn" style="background:#2a2a4a;color:#ff6b9d;border:1px solid #ff6b9d;">🎨 NovelAI-蛋糕</button>
+                        <button onclick="location.href='/gen-log.html'" style="background:#2a2a4a;color:#86efac;border:1px solid #86efac;">📜 生图日志</button>
                     </span>
                 </div>
             </div>
@@ -699,6 +700,7 @@
             aiStopBtn.style.display = 'inline-block';
             ch._aiProcessing = true;
             showToast(`🧠 使用 ${engineLabel} 分析章节...`);
+            const originalChapterIndex = currentIndex;
 
             aiAbortController = new AbortController();
             let timerId = null;
@@ -714,6 +716,14 @@
                 if (engine === 'comfyui' && workflowConfig) {
                     requestBody.workflowConfig = workflowConfig;
                 }
+                if (engine === 'novelai') {
+                    try {
+                        const n = config.novelai || {};
+                        requestBody.apiUrl = n.apiUrl || '';
+                        requestBody.apiKey = n.apiKey || '';
+                        requestBody.model = n.model || 'nai-diffusion-5-full';
+                    } catch (e) {}
+                }
                 if (engine === 'grok') {
                     try {
                         const grok = JSON.parse(localStorage.getItem('grok_config') || '{}');
@@ -725,34 +735,22 @@
                         requestBody.height = h;
                     } catch (e) {}
                 }
-                // 固定前置/后置提示词 + 替换规则
+                if (engine === 'runninghub') {
+                    try {
+                        const rh = (loadApiConfig() || {}).runninghub || {};
+                        requestBody.rhApiKey = rh.apiKey || '';
+                        requestBody.rhWorkflowId = rh.workflowId || '';
+                        requestBody.rhPosNode = rh.posNode || '6';
+                        requestBody.rhPosField = rh.posField || 'text';
+                        requestBody.rhNegNode = rh.negNode || '7';
+                        requestBody.rhSeedNode = rh.seedNode || '3';
+                    } catch (e) {}
+                }
+                // 固定前置/后置提示词
                 try {
                     const fp = JSON.parse(localStorage.getItem('fixed_prompts') || '{}');
                     requestBody.promptPrefix = fp.prefix || '';
                     requestBody.promptSuffix = fp.suffix || '';
-                    // 应用替换规则到每个场景
-                    const rulesText = fp.replaceRules || '';
-                    if (rulesText) {
-                        for (const sc of scenes) {
-                            let out = sc.prompt;
-                            const pres = [], posts = [];
-                            for (const line of rulesText.split('\n')) {
-                                const s = line.trim();
-                                if (!s || !s.includes('=')) continue;
-                                const [trigger, rest] = s.split('=', 2);
-                                if (!rest || !out.includes(trigger)) continue;
-                                const parts = rest.split('|');
-                                const action = (parts[0]||'').trim();
-                                const val = (parts[1]||'').trim();
-                                if (action === '替换') out = out.split(trigger).join(val);
-                                else if (action === '前置') pres.push(val);
-                                else if (action === '后置') posts.push(val);
-                            }
-                            if (pres.length) out = pres.join(', ') + ', ' + out;
-                            if (posts.length) out = out + ', ' + posts.join(', ');
-                            sc.prompt = out;
-                        }
-                    }
                 } catch (e) {}
 
                 const progressPanel = document.getElementById('aiProgressPanel');
@@ -779,9 +777,15 @@
                 const t0 = Date.now();
                 const maxScenes = parseInt(document.getElementById('maxScenesInput').value) || 5;
                 const llmCfg = (loadApiConfig() || {}).llm || {};
+                // 读取配图规则（配图工具页配置的 analyzer_rule）
+                let analyzeTemplate = '';
+                try {
+                    const ar = JSON.parse(localStorage.getItem('analyzer_rule') || '{}');
+                    analyzeTemplate = ar.rule || '';
+                } catch (e) {}
                 const analyzeR = await fetch(`${API_BASE}/api/analyze-only`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate: '', maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '' }),
+                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate, maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '' }),
                     signal: aiAbortController.signal
                 });
                 if (!analyzeR.ok) throw new Error(`分析失败 HTTP ${analyzeR.status}`);
@@ -790,6 +794,35 @@
                 const scenes = (analyzeData.scenes || []).slice(0, maxScenes);
                 const tAnalyze = Date.now() - t0;
                 logLine(`✅ 分析完成，找到 ${scenes.length} 个场景（耗时 ${t(tAnalyze)}）`);
+
+                // === 应用替换规则 ===
+                try {
+                    const fp = JSON.parse(localStorage.getItem('fixed_prompts') || '{}');
+                    const rulesText = fp.replaceRules || '';
+                    if (rulesText && scenes.length) {
+                        const ruleCount = rulesText.split('\n').filter(l=>l.trim()).length;
+                        logLine(`🔄 应用替换规则（${ruleCount} 条）`);
+                        for (const sc of scenes) {
+                            let out = sc.prompt || '';
+                            const pres = [], posts = [];
+                            for (const line of rulesText.split('\n')) {
+                                const s = line.trim();
+                                if (!s || !s.includes('=')) continue;
+                                const [trigger, rest] = s.split('=', 2);
+                                if (!rest || !out.includes(trigger)) continue;
+                                const parts = rest.split('|');
+                                const action = (parts[0]||'').trim();
+                                const val = (parts[1]||'').trim();
+                                if (action === '替换') { logLine(`  替换 "${trigger}" → "${val}"`); out = out.split(trigger).join(val); }
+                                else if (action === '前置') pres.push(val);
+                                else if (action === '后置') posts.push(val);
+                            }
+                            if (pres.length) out = pres.join(', ') + ', ' + out;
+                            if (posts.length) out = out + ', ' + posts.join(', ');
+                            sc.prompt = out;
+                        }
+                    }
+                } catch (e) { console.error('替换规则错误:', e); }
 
                 if (!scenes.length) {
                     showToast('ℹ️ 未找到适合配图的场景');
@@ -870,7 +903,8 @@
 
                 ch._aiProcessed = true;
                 ch.wordCount = ch.content.length;
-                renderContent();
+                const stillOnThisChapter = (currentIndex === originalChapterIndex);
+                if (stillOnThisChapter) renderContent();
                 await saveCurrentChapter();
                 progressTitle.textContent = '✅ 完成';
                 logLine(`📊 共 ${scenes.length} 场景，成功 ${insertedCount}，失败 ${failedCount}，总耗时 ${t(Date.now()-t0)}`);
@@ -936,7 +970,8 @@
         const ENGINE_LIST = [
             { id: 'comfyui', label: '🖥️ ComfyUI' },
             { id: 'novelai', label: '🎨 NovelAI' },
-            { id: 'grok', label: '🍌 Grok' }
+            { id: 'grok', label: '🍌 Grok' },
+            { id: 'runninghub', label: '☁️ RunningHub' }
         ];
         const currentEngineBtn = document.getElementById('currentEngineBtn');
         function currentEngine() {

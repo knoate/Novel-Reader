@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📜 生图日志</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0a14; color: #e0e0e0; font-family: system-ui, -apple-system, "PingFang SC", sans-serif; padding: 16px; }
+    .header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .back { background: #2a2a4a; color: #60a5fa; border: 1px solid #60a5fa; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; text-decoration: none; }
+    .back:hover { background: #333366; }
+    h1 { font-size: 20px; }
+    .refresh { background: #7c3aed; color: #fff; border: none; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .refresh:active { transform: scale(0.96); }
+    .count { color: #888; font-size: 13px; }
+    .filter { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .filter input { background: #12122a; border: 1px solid #2a2a4a; color: #e0e0e0; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+    .item { background: #0e0e1e; border: 1px solid #22223c; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+    .item:hover { border-color: #3a3a6a; }
+    .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .route { background: #1e1e3a; color: #7dd3fc; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-family: monospace; }
+    .engine { background: #1a2e1a; color: #86efac; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+    .time { color: #888; font-size: 12px; }
+    .workflow { background: #2a1a2e; color: #e9d5ff; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-family: monospace; }
+    .prompt { color: #c0c0d0; font-size: 13px; line-height: 1.6; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+    .neg { color: #f87171; font-size: 12px; margin-top: 6px; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+    .empty { text-align: center; color: #666; padding: 40px; }
+    .copy { background: transparent; color: #666; border: 1px solid #333; padding: 2px 8px; border-radius: 6px; cursor: pointer; font-size: 11px; margin-top: 6px; }
+    .copy:hover { color: #ffd866; border-color: #ffd866; }
+</style>
+</head>
+<body>
+<div class="header">
+    <a class="back" href="index.html">← 返回主界面</a>
+    <h1>📜 生图日志</h1>
+    <button class="refresh" onclick="loadLog()">🔄 刷新</button>
+    <span class="count" id="count"></span>
+    <div class="filter">
+        <input id="filter" placeholder="搜索路由/提示词..." oninput="render()">
+    </div>
+</div>
+<div id="list"><div class="empty">加载中...</div></div>
+<script>
+let LOG = [];
+async function loadLog() {
+    const list = document.getElementById('list');
+    list.innerHTML = '<div class="empty">加载中...</div>';
+    try {
+        const r = await fetch('/api/generation-log?limit=500');
+        const d = await r.json();
+        LOG = d.success ? d.log : [];
+        document.getElementById('count').textContent = `共 ${LOG.length} 条`;
+        render();
+    } catch (e) {
+        list.innerHTML = `<div class="empty">加载失败: ${e.message}</div>`;
+    }
+}
+function render() {
+    const q = (document.getElementById('filter').value || '').toLowerCase();
+    const items = q
+        ? LOG.filter(x => (x.route||'').toLowerCase().includes(q) || (x.prompt||'').toLowerCase().includes(q) || (x.engine||'').toLowerCase().includes(q))
+        : LOG;
+    const list = document.getElementById('list');
+    if (!items.length) { list.innerHTML = '<div class="empty">暂无记录</div>'; return; }
+    list.innerHTML = items.map((x, i) => `
+        <div class="item">
+            <div class="meta">
+                <span class="route">${esc(x.route||'')}</span>
+                <span class="engine">${esc(x.engine||'')}</span>
+                ${x.workflow ? `<span class="workflow">wf: ${esc(x.workflow)}</span>` : ''}
+                ${x.model ? `<span class="workflow">model: ${esc(x.model)}</span>` : ''}
+                <span class="time">${esc(x.ts||'')}</span>
+            </div>
+            <div class="prompt">${esc(x.prompt||'（无提示词）')}</div>
+            ${x.negative ? `<div class="neg">负: ${esc(x.negative)}</div>` : ''}
+            <button class="copy" onclick="copyPrompt(${i}, '${esc(x.prompt||'')}'.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>'))">📋 复制提示词</button>
+        </div>`).join('');
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function copyPrompt(i, text) {
+    // 从 LOG 拿原始文本更安全
+    const raw = LOG[i]?.prompt || '';
+    navigator.clipboard.writeText(raw).then(() => alert('已复制')).catch(() => {});
+}
+loadLog();
+</script>
+</body>
+</html>

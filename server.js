@@ -56,6 +56,35 @@ function loadJson(file, fallback) {
 function saveJson(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
+// ============================================================
+//  生图日志（记录每次生成的路由 + 提示词）
+// ============================================================
+const GEN_LOG_FILE = path.join(DATA_DIR, 'generation_log.jsonl');
+function logGen(route, opts = {}) {
+    try {
+        const entry = {
+            ts: new Date().toISOString(),
+            route,
+            engine: opts.engine || opts.model || '',
+            prompt: (opts.prompt || '').slice(0, 2000),
+            negative: (opts.negative_prompt || '').slice(0, 1000),
+            model: opts.model || '',
+            seed: opts.seed,
+            workflow: opts.workflowId || (opts.workflowConfig && opts.workflowConfig.modelName) || '',
+            source: opts.source || 'api'
+        };
+        fs.appendFileSync(GEN_LOG_FILE, JSON.stringify(entry) + '\n', 'utf8');
+    } catch (e) { /* 日志失败不影响生图 */ }
+}
+// 查询生图日志
+function readGenLog(limit = 200) {
+    try {
+        if (!fs.existsSync(GEN_LOG_FILE)) return [];
+        const lines = fs.readFileSync(GEN_LOG_FILE, 'utf8').split('\n').filter(l => l.trim());
+        const all = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+        return all.slice(-limit).reverse();
+    } catch { return []; }
+}
 let novels = loadJson(NOVELS_FILE, []);
 let chapters = loadJson(CHAPTERS_FILE, []);
 let illustrations = loadJson(ILLUS_FILE, []);
@@ -324,7 +353,9 @@ async function generateComfyImage(prompt, negativePrompt, workflowConfig, templa
 // ============================================================
 async function generateNovelAIImage(opts = {}) {
     let { prompt, negative_prompt, width = 832, height = 1216, steps = 28, sampler = 'k_euler_ancestral', scale = 5.0, model, seed, promptTemplate, negativeTemplate } = opts;
-    if (!NOVELAI_API_KEY) throw new Error('未配置 NOVELAI_API_KEY');
+    const naiUrl = opts.apiUrl || NOVELAI_API_URL;
+    const naiKey = opts.apiKey || NOVELAI_API_KEY;
+    if (!naiKey) throw new Error('未配置 NovelAI API Key');
     // 应用模板
     prompt = renderTemplate(promptTemplate, { prompt, __fallback: prompt });
     negative_prompt = renderTemplate(negativeTemplate, { prompt, __fallback: negative_prompt || 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry' });
@@ -341,8 +372,8 @@ async function generateNovelAIImage(opts = {}) {
     };
     if (seed) payload.parameters.seed = seed;
 
-    const resp = await axios.post(NOVELAI_API_URL, payload, {
-        headers: { 'Authorization': `Bearer ${NOVELAI_API_KEY}`, 'Content-Type': 'application/json' },
+    const resp = await axios.post(naiUrl, payload, {
+        headers: { 'Authorization': `Bearer ${naiKey}`, 'Content-Type': 'application/json' },
         timeout: 120000
     });
     if (!resp.data.success) throw new Error(resp.data.error || 'NovelAI 生成失败');
@@ -590,6 +621,7 @@ app.post('/api/generate', async (req, res) => {
     try {
         const { prompt, negative_prompt, workflowConfig, promptTemplate, negativeTemplate, comfyUrl } = req.body;
         if (!prompt) return res.status(400).json({ error: '缺少绘图提示词' });
+        logGen('/api/generate', { prompt, negative_prompt, workflowConfig, engine: 'comfyui', source: req.body.source });
         const img = await generateComfyImage(prompt, negative_prompt, workflowConfig, { promptTemplate, negativeTemplate }, comfyUrl);
         res.json({ success: true, image: img });
     } catch (e) {
@@ -601,6 +633,7 @@ app.post('/api/generate', async (req, res) => {
 // ---- NovelAI 生图 ----
 app.post('/api/novelai-generate', async (req, res) => {
     try {
+        logGen('/api/novelai-generate', { ...req.body, engine: 'novelai', source: req.body.source });
         const images = await generateNovelAIImage(req.body);
         res.json({ success: true, images, count: images.length });
     } catch (e) {
@@ -624,6 +657,7 @@ app.post('/api/grok-generate', async (req, res) => {
     try {
         const opts = { ...req.body };
         if (opts.grokModel && !opts.model) opts.model = opts.grokModel;
+        logGen('/api/grok-generate', { ...opts, engine: 'grok', source: req.body.source });
         opts.prompt = wrapPrompt(opts.prompt, opts);
         const img = await generateGrokImage(opts);
         res.json({ success: true, image: img });
@@ -660,6 +694,82 @@ app.post('/api/analyze-only', async (req, res) => {
     }
 });
 
+// ComfyUI 状态检测（后端代理，避免浏览器 CORS）
+app.get('/api/comfyui-status', async (req, res) => {
+    try {
+        const base = (req.query.url || 'http://127.0.0.1:8188').replace(/\/+$/, '');
+        const statsRes = await axios.get(`${base}/system_stats`, { timeout: 8000 });
+        const device = statsRes.data?.devices?.[0]?.name || '未知';
+        let queue = 0;
+        try {
+            const qRes = await axios.get(`${base}/queue`, { timeout: 5000 });
+            queue = qRes.data?.queue_running?.length || 0;
+        } catch (e) {}
+        res.json({ success: true, device, queue });
+    } catch (e) {
+        res.json({ success: false, error: e.code === 'ECONNREFUSED' ? '连接被拒绝，ComfyUI 可能未启动' : e.message });
+    }
+});
+
+// 测试 RunningHub 生图
+app.post('/api/test-runninghub', async (req, res) => {
+    try {
+        const { apiKey, workflowId, posNode, posField, negNode, seedNode } = req.body;
+        if (!apiKey || !workflowId) return res.json({ success: false, error: '缺少 API Key 或 Workflow ID' });
+        const r = await generateRunningHubImage({
+            prompt: 'a beautiful landscape, sunset, mountains, digital art, high quality',
+            negative_prompt: '',
+            apiKey, workflowId, posNodeId: posNode, posField: posField, negNodeId: negNode, seedNodeId: seedNode
+        });
+        res.json({ success: true, image: r.url });
+    } catch (e) {
+        console.error('RunningHub 测试失败:', e.message);
+        res.json({ success: false, error: e.message });
+    }
+});
+
+// ---- RunningHub 生图（国际站）----
+async function generateRunningHubImage({ prompt, negative_prompt, apiKey, workflowId, posNodeId = '6', posField = 'text', negNodeId = '7', seedNodeId = '3' }) {
+    if (!apiKey || !workflowId) throw new Error('RunningHub 需要 API Key 和 Workflow ID');
+    const nodeInfoList = [
+        { nodeId: String(posNodeId), fieldName: posField, fieldValue: prompt }
+    ];
+    if (negative_prompt) nodeInfoList.push({ nodeId: String(negNodeId), fieldName: 'text', fieldValue: negative_prompt });
+    const mySeed = Math.floor(Math.random() * 1e15);
+    nodeInfoList.push({ nodeId: String(seedNodeId), fieldName: 'seed', fieldValue: mySeed });
+
+    // 1. 创建任务
+    console.log('🚀 RunningHub 创建任务, workflow:', workflowId);
+    const createRes = await axios.post('https://www.runninghub.ai/task/openapi/create', {
+        apiKey, workflowId, nodeInfoList, addMetadata: false
+    }, { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, timeout: 30000 });
+    if (createRes.data.code !== 0) throw new Error('RunningHub: ' + (createRes.data.msg || '创建失败'));
+    const taskId = createRes.data.data.taskId;
+    console.log('📋 RunningHub 任务ID:', taskId);
+
+    // 2. 轮询结果
+    const maxWait = 300000;
+    const interval = 3000;
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+        await new Promise(r => setTimeout(r, interval));
+        try {
+            const outRes = await axios.get(`https://www.runninghub.ai/task/openapi/output?apiKey=${apiKey}&taskId=${taskId}`, { headers: { 'Authorization': `Bearer ${apiKey}` }, timeout: 15000 });
+            if (outRes.data.code === 0 && Array.isArray(outRes.data.data) && outRes.data.data.length > 0) {
+                const url = outRes.data.data[0].fileUrl;
+                console.log('✅ RunningHub 完成:', url);
+                return { url, seed: mySeed };
+            }
+            const st = outRes.data.data?.taskStatus || '';
+            if (st === 'FAILED' || outRes.data.code === 1001) throw new Error('RunningHub 任务失败');
+        } catch (e) {
+            if (e.message.includes('RunningHub 任务失败')) throw e;
+            // 轮询接口可能还没就绪，继续等
+        }
+    }
+    throw new Error('RunningHub 超时（5分钟）');
+}
+
 // ---- 单场景生图（前端逐张调用，可显示进度）----
 app.post('/api/generate-scene', async (req, res) => {
     let aborted = false;
@@ -669,6 +779,7 @@ app.post('/api/generate-scene', async (req, res) => {
         const pre = req.body.promptPrefix || '';
         const suf = req.body.promptSuffix || '';
         const wrapped = wrapPrompt(prompt, { promptPrefix: pre, promptSuffix: suf });
+        logGen('/api/generate-scene', { prompt: wrapped, negative_prompt: negative_prompt || '', engine, workflowConfig, model: req.body.model, source: req.body.source || 'reader', novelId: req.body.novelId });
         let image, seed;
         if (engine === 'novelai') {
             const urls = await generateNovelAIImage({ ...req.body, prompt: wrapped, negative_prompt: negative_prompt || '' });
@@ -683,6 +794,18 @@ app.post('/api/generate-scene', async (req, res) => {
                 height: req.body.height
             });
             image = r.url;
+        } else if (engine === 'runninghub') {
+            const r = await generateRunningHubImage({
+                prompt: wrapped,
+                negative_prompt: negative_prompt || '',
+                apiKey: req.body.rhApiKey,
+                workflowId: req.body.rhWorkflowId,
+                posNodeId: req.body.rhPosNode || '6',
+                posField: req.body.rhPosField || 'text',
+                negNodeId: req.body.rhNegNode || '7',
+                seedNodeId: req.body.rhSeedNode || '3'
+            });
+            image = r.url; seed = r.seed;
         } else {
             const r = await generateComfyImage(wrapped, negative_prompt || '', workflowConfig, {}, req.body.comfyUrl);
             image = r.url; seed = r.seed;
@@ -709,6 +832,11 @@ app.post('/api/generate-scene', async (req, res) => {
 app.get('/api/stats', (req, res) => {
     res.json({ success: true, log: statsLog });
 });
+// 生图日志查询
+app.get('/api/generation-log', (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+    res.json({ success: true, log: readGenLog(limit) });
+});
 app.delete('/api/stats', (req, res) => {
     statsLog = [];
     saveJson(STATS_FILE, statsLog);
@@ -731,6 +859,7 @@ app.post('/api/analyze-and-generate', async (req, res) => {
             try {
                 let image, seed, usedEngine = engine;
                 const wrapped = wrapPrompt(scene.prompt, { promptPrefix: pre, promptSuffix: suf });
+                logGen('/api/analyze-and-generate', { prompt: wrapped, negative_prompt: scene.negative_prompt || '', engine, workflowConfig, model, source: req.body.source || 'illustrator' });
                 if (engine === 'novelai') {
                     const urls = await generateNovelAIImage({ ...req.body, prompt: wrapped, negative_prompt: scene.negative_prompt || '' });
                     image = urls[0];
@@ -791,10 +920,18 @@ app.post('/api/llm-models', async (req, res) => {
             : Array.isArray(r.data?.models) ? r.data.models
             : [];
         console.log('📥 获取到模型:', models);
-        res.json({ success: true, models: models.length ? models : ['gpt-4', 'gpt-3.5-turbo'], _default: !models.length });
+        if (!models.length) {
+            // 拿到 200 但没解析出模型 → 明确报错
+            return res.json({ success: false, error: '接口返回 200 但未解析出模型列表（格式可能不兼容）', models: [], _default: false });
+        }
+        res.json({ success: true, models });
     } catch (e) {
-        console.warn('📥 获取模型失败:', e.message);
-        res.json({ success: true, models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'deepseek-chat', 'deepseek-coder'], _default: true, error: e.message });
+        console.warn('📥 获取模型失败:', e.response ? `${e.response.status} ${e.response.statusText}` : e.message);
+        const detail = e.response
+            ? `HTTP ${e.response.status} ${e.response.statusText}${e.response.data && e.response.data.error ? ': ' + (typeof e.response.data.error === 'string' ? e.response.data.error : JSON.stringify(e.response.data.error).slice(0,200)) : ''}`
+            : e.code === 'ECONNREFUSED' ? '连接被拒绝，确认 API 地址正确'
+            : e.message;
+        res.json({ success: false, error: detail, models: [], _default: false });
     }
 });
 

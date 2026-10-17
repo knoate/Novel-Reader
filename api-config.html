@@ -433,6 +433,46 @@
             </div>
         </div>
 
+        <!-- RunningHub 配置 -->
+        <div class="card">
+            <div class="card-title">
+                ☁️ RunningHub 生图配置
+                <span class="badge" id="rhBadge" class="badge-unknown">未配置</span>
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="rhApiKey" placeholder="RunningHub API Key...">
+                <div class="hint">国际站: runninghub.ai，在个人设置里创建 API Key</div>
+            </div>
+            <div class="form-group">
+                <label>Workflow ID</label>
+                <input type="text" id="rhWorkflowId" placeholder="如 1904136902449209346">
+                <div class="hint">在 RunningHub 工作流页面导出/分享，URL 里的那串数字</div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>提示词节点ID（正）</label>
+                    <input type="text" id="rhPosNode" value="6" placeholder="6">
+                </div>
+                <div class="form-group">
+                    <label>正向字段名</label>
+                    <input type="text" id="rhPosField" value="text" placeholder="text">
+                </div>
+                <div class="form-group">
+                    <label>负面提示词节点ID</label>
+                    <input type="text" id="rhNegNode" value="7" placeholder="7">
+                </div>
+                <div class="form-group">
+                    <label>种子节点ID</label>
+                    <input type="text" id="rhSeedNode" value="3" placeholder="3">
+                </div>
+            </div>
+            <div class="hint">💡 节点ID从导出的 workflow JSON 里看，CLIPTextEncode 正向节点通常是 6，负面是 7，KSampler 的 seed 在节点 3</div>
+            <div class="btn-group" style="margin-top:8px;">
+                <button class="btn btn-success btn-sm" id="testRhBtn">🔍 测试生图</button>
+            </div>
+        </div>
+
         <!-- 状态汇总 -->
         <div class="card">
             <div class="card-title">📊 服务状态汇总</div>
@@ -522,6 +562,14 @@
             document.getElementById('llmModel').value = config.llm.model || 'gpt-4';
             document.getElementById('llmTimeout').value = config.llm.timeout || 60;
 
+            // RunningHub
+            document.getElementById('rhApiKey').value = config.runninghub?.apiKey || '';
+            document.getElementById('rhWorkflowId').value = config.runninghub?.workflowId || '';
+            document.getElementById('rhPosNode').value = config.runninghub?.posNode || '6';
+            document.getElementById('rhPosField').value = config.runninghub?.posField || 'text';
+            document.getElementById('rhNegNode').value = config.runninghub?.negNode || '7';
+            document.getElementById('rhSeedNode').value = config.runninghub?.seedNode || '3';
+
             // 显示当前模型名称
             const modelLabel = document.getElementById('llmModelLabel');
             if (modelLabel) {
@@ -554,6 +602,14 @@
                     apiUrl: document.getElementById('llmApiUrl').value.trim(),
                     model: document.getElementById('llmModel').value.trim() || 'gpt-4',
                     timeout: parseInt(document.getElementById('llmTimeout').value) || 60
+                },
+                runninghub: {
+                    apiKey: document.getElementById('rhApiKey').value.trim(),
+                    workflowId: document.getElementById('rhWorkflowId').value.trim(),
+                    posNode: document.getElementById('rhPosNode').value.trim() || '6',
+                    posField: document.getElementById('rhPosField').value.trim() || 'text',
+                    negNode: document.getElementById('rhNegNode').value.trim() || '7',
+                    seedNode: document.getElementById('rhSeedNode').value.trim() || '3'
                 }
             };
         }
@@ -833,6 +889,14 @@
 
                 const data = await response.json();
 
+                if (!data.success) {
+                    // 后端明确失败 → 展示真实错误
+                    const hint = document.getElementById('llmModelHint');
+                    hint.textContent = '⚠️ ' + (data.error || '获取模型失败');
+                    showToast('❌ ' + (data.error || '获取模型失败'), 'error');
+                    return;
+                }
+
                 if (data.success && data.models && data.models.length > 0) {
                     const datalist = document.getElementById('llmModelList');
                     datalist.innerHTML = '';
@@ -938,6 +1002,44 @@
         document.getElementById('testComfyuiBtn').addEventListener('click', testComfyui);
         document.getElementById('testNovelaiBtn').addEventListener('click', testNovelai);
         document.getElementById('testLlmBtn').addEventListener('click', testLlm);
+        document.getElementById('testRhBtn').addEventListener('click', async () => {
+            const apiKey = document.getElementById('rhApiKey').value.trim();
+            const workflowId = document.getElementById('rhWorkflowId').value.trim();
+            const badge = document.getElementById('rhBadge');
+            if (!apiKey || !workflowId) { showToast('⚠️ 请先填 API Key 和 Workflow ID', 'error'); return; }
+            badge.textContent = '⏳ 测试中...';
+            badge.className = 'badge badge-unknown';
+            try {
+                const r = await fetch('/api/test-runninghub', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiKey, workflowId,
+                        posNode: document.getElementById('rhPosNode').value.trim() || '6',
+                        posField: document.getElementById('rhPosField').value.trim() || 'text',
+                        negNode: document.getElementById('rhNegNode').value.trim() || '7',
+                        seedNode: document.getElementById('rhSeedNode').value.trim() || '3'
+                    })
+                });
+                const data = await r.json();
+                if (data.success) {
+                    badge.textContent = '✅ 已配置';
+                    badge.className = 'badge badge-online';
+                    showToast('✅ RunningHub 测试成功', 'success');
+                    if (data.image) {
+                        const w = window.open('', '_blank');
+                        w.document.write(`<img src="${data.image}" style="max-width:100%;">`);
+                    }
+                } else {
+                    badge.textContent = '❌ 失败';
+                    badge.className = 'badge badge-error';
+                    showToast('❌ ' + (data.error || '测试失败'), 'error');
+                }
+            } catch (e) {
+                badge.textContent = '❌ 失败';
+                badge.className = 'badge badge-error';
+                showToast('❌ ' + e.message, 'error');
+            }
+        });
 
         document.getElementById('fetchNovelaiModelsBtn').addEventListener('click', fetchNovelaiModels);
         document.getElementById('fetchLlmModelsBtn').addEventListener('click', fetchLlmModels);
