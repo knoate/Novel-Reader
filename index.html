@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📖 小说阅读器</title>
     <link rel="stylesheet" href="style.css">
+    <!-- 阅读字体：动态加载（手机端通用），失败不影响主功能 -->
+    <script>
+        (function () {
+            var fonts = [
+                'https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css',
+                'https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.1.1/400.css',
+                'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.1.1/400.css'
+            ];
+            function loadFont(u) {
+                var l = document.createElement('link');
+                l.rel = 'stylesheet'; l.href = u;
+                l.onerror = function () { /* CDN 失败，静默忽略 */ };
+                document.head.appendChild(l);
+            }
+            // 页面空闲/加载后注入，避免阻塞
+            if (window.requestIdleCallback) window.requestIdleCallback(function () { fonts.forEach(loadFont); });
+            else window.addEventListener('load', function () { fonts.forEach(loadFont); });
+        })();
+    </script>
     <style>
         /* 配图提示词隐藏/显示 */
         .content-area .prompt-text {
@@ -76,20 +95,18 @@
                 <h2>📚 章节列表</h2>
                 <span class="badge" id="chapterCount">0 章</span>
             </div>
-            <div id="novelSelector" style="padding:8px 12px;border-bottom:1px solid #2a2a4a;">
-                <select id="novelSelect" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
-                <div style="display:flex;gap:6px;margin-top:6px;">
+            <div id="novelSelector" style="padding:6px 10px;border-bottom:1px solid #2a2a4a;">
+                <select id="novelSelect" style="width:100%;padding:5px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
+                <div style="display:flex;gap:5px;margin-top:5px;">
                     <button id="newNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">➕ 新建</button>
                     <button id="renameNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
                     <button id="delNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
                 </div>
-                <div style="display:flex;gap:6px;margin-top:6px;">
-                    <button id="roleCardsBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色设定</button>
-                    <button id="charactersBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#7dd3fc;border:1px solid #38bdf8;border-radius:5px;cursor:pointer;">🧑 人物库</button>
-                </div>
-                <div style="display:flex;gap:6px;margin-top:6px;">
-                    <button id="exportNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
-                    <button id="importNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
+                <div style="display:flex;gap:5px;margin-top:5px;">
+                    <button id="roleCardsBtn" title="角色设定" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色</button>
+                    <button id="charactersBtn" title="人物库" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#7dd3fc;border:1px solid #38bdf8;border-radius:5px;cursor:pointer;">🧑 人物库</button>
+                    <button id="exportNovelBtn" title="导出" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
+                    <button id="importNovelBtn" title="导入" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
                     <input type="file" id="importNovelFile" accept=".json,application/json" style="display:none;">
                 </div>
             </div>
@@ -1350,9 +1367,12 @@
         // 字体切换
         const FONT_LIST = [
             { name: '默认', css: '' },
+            { name: '霞鹜文楷', css: "'LXGW WenKai', serif" },
+            { name: '思源宋体', css: "'Noto Serif SC', 'Songti SC', serif" },
+            { name: '思源黑体', css: "'Noto Sans SC', 'PingFang SC', sans-serif" },
+            { name: '圆体', css: "'Noto Sans SC', 'Yuanti SC', sans-serif" },
             { name: '衬线', css: "'Noto Serif CJK SC', 'Songti SC', serif" },
             { name: '无衬线', css: "'Noto Sans CJK SC', 'PingFang SC', sans-serif" },
-            { name: '圆体', css: "'Noto Sans CJK SC', 'Yuanti SC', sans-serif" },
             { name: '宋体(PC)', css: 'SimSun, serif' },
             { name: '雅黑(PC)', css: "'Microsoft YaHei', sans-serif" },
             { name: '楷体(PC)', css: 'KaiTi, serif' },
