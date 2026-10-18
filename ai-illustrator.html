@@ -801,7 +801,7 @@
                     width: config.novelai?.width || 832,
                     height: config.novelai?.height || 1216,
                     ...getAnalyzerRule(),
-                    roles: getRoles()
+                    roles: await getRoles()
                 };
                 if (engine === 'grok') Object.assign(requestBody, getGrokConfig());
                 if (engine === 'novelai') {
@@ -1093,7 +1093,33 @@
         roleCardsEl.addEventListener('input', () => { clearTimeout(roleCardsEl._t); roleCardsEl._t = setTimeout(saveRoleCards, 400); });
         loadRoleNovels();
         loadRoleCards();
-        function getRoles() { return textToRoles(roleCardsEl.value); }
+        async function getRoles() {
+            let base = textToRoles(roleCardsEl.value);
+            // 合并人物信息库（AI 解析的外貌/身份/性格），同名优先用人物库
+            if (roleNovelId) {
+                try {
+                    const r = await fetch(`${API_BASE}/api/characters?novelId=${encodeURIComponent(roleNovelId)}`);
+                    const d = await r.json();
+                    if (d.success && Array.isArray(d.characters)) {
+                        const charRoles = d.characters
+                            .filter(c => c && c.name)
+                            .map(c => {
+                                const parts = [];
+                                if (c.appearance) parts.push('外貌' + c.appearance);
+                                if (c.identity) parts.push('身份' + c.identity);
+                                if (c.personality) parts.push('性格' + c.personality);
+                                return { name: c.name, desc: parts.join('，') };
+                            })
+                            .filter(x => x.desc);
+                        const merged = new Map();
+                        for (const r of base) merged.set(r.name, r);
+                        for (const r of charRoles) merged.set(r.name, r);
+                        base = Array.from(merged.values());
+                    }
+                } catch (e) {}
+            }
+            return base;
+        }
 
         function getAnalyzerRule() {
             return { analyzeTemplate: tplAnalyzer.value.trim() };

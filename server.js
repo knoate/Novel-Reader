@@ -49,6 +49,7 @@ const CHAPTERS_FILE = path.join(DATA_DIR, 'chapters.json');
 const ILLUS_FILE = path.join(DATA_DIR, 'illustrations.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const ROLES_FILE = path.join(DATA_DIR, 'roles.json');
+const CHARACTERS_FILE = path.join(DATA_DIR, 'characters.json');
 
 function loadJson(file, fallback) {
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -91,6 +92,7 @@ let chapters = loadJson(CHAPTERS_FILE, []);
 let illustrations = loadJson(ILLUS_FILE, []);
 let statsLog = loadJson(STATS_FILE, []);
 let roles = loadJson(ROLES_FILE, {}); // { novelId: [{ name, desc }] }
+let characters = loadJson(CHARACTERS_FILE, {}); // { novelId: [{ name, role, identity, appearance, personality, relation, firstChapter, appearances, lastChapter }] }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 function logStat(engine, success) {
@@ -511,10 +513,12 @@ app.delete('/api/novels/:id', (req, res) => {
     illustrations = illustrations.filter(i => i.novelId !== nid);
     novels = novels.filter(n => n.id !== nid);
     delete roles[nid];
+    delete characters[nid];
     saveJson(CHAPTERS_FILE, chapters);
     saveJson(ILLUS_FILE, illustrations);
     saveJson(NOVELS_FILE, novels);
     saveJson(ROLES_FILE, roles);
+    saveJson(CHARACTERS_FILE, characters);
     res.json({ success: true });
 });
 
@@ -530,6 +534,195 @@ app.post('/api/roles', (req, res) => {
     roles[novelId] = Array.isArray(newRoles) ? newRoles.filter(r => r && r.name && r.desc) : [];
     saveJson(ROLES_FILE, roles);
     res.json({ success: true, roles: roles[novelId] });
+});
+
+// ============================================================
+//  人物信息库（AI 解析章节，增量更新主角/NPC 表）
+// ============================================================
+const CHARACTER_SYSTEM = `你是一位资深的小说角色分析师。请分析给定章节中出现的所有人，识别出：
+1. name：人物姓名（无姓名则用最显著称呼）
+2. role：人物类型，仅填 "主角" 或 "NPC"
+3. identity：身份/职业/地位
+4. appearance：外貌描写（无则留空）
+5. personality：性格特征（无则留空）
+6. relation：与主角或故事的关系
+7. keyword：该人物在章节中最典型的一个称呼或特征词（用于后续识别）
+只输出 JSON 数组，不要任何解释，格式：
+[{"name":"","role":"主角","identity":"","appearance":"","personality":"","relation":"","keyword":""}]`;
+
+app.post('/api/characters/analyze', async (req, res) => {
+    const ctrl = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
+    try {
+        const { novelId, content, title, model } = req.body;
+        if (!novelId || !content) return res.status(400).json({ error: '缺少 novelId 或章节内容' });
+        const opts = { apiUrl: req.body.llmApiUrl || '', apiKey: req.body.llmApiKey || '' };
+        // 传已有角色库作为参考（增量更新）
+        const existing = characters[novelId] || [];
+        const existingInfo = existing.map(c => `- ${c.name}（${c.role}，${c.identity||''}，${c.appearance||''}，${c.personality||''}）`).join('\n');
+        const prompt = `${CHARACTER_SYSTEM}\n\n【该小说已识别的角色（用于去重和补充信息，不要重复新增）】\n${existingInfo || '（暂无）'}\n\n【章节标题】${title || ''}\n【章节内容】\n${content.slice(0, 6000)}`;
+        const text = await callLlm(prompt, model, ctrl.signal, opts);
+        // 解析 JSON
+        let arr = [];
+        try {
+            const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+            const candidate = fence ? fence[1] : text;
+            const m = candidate.match(/\[[\s\S]*\]/);
+            arr = JSON.parse(m ? m[0] : candidate);
+        } catch (e) {
+            return res.status(500).json({ error: 'AI 返回无法解析的人物数据' });
+        }
+        if (!Array.isArray(arr)) return res.status(500).json({ error: 'AI 未返回人物数组' });
+
+        // 增量合并
+        const cur = characters[novelId] || [];
+        const merged = cur.slice();
+        let added = [], updated = [];
+        for (const item of arr) {
+            const name = (item.name || '').trim();
+            if (!name) continue;
+            const idx = merged.findIndex(c => c.name === name);
+            if (idx >= 0) {
+                // 更新：补充缺失字段
+                const before = JSON.stringify(merged[idx]);
+                for (const k of ['identity','appearance','personality','relation']) {
+                    if (item[k] && !merged[idx][k]) merged[idx][k] = item[k];
+                }
+                if (item.role === '主角' && merged[idx].role !== '主角') merged[idx].role = '主角';
+                merged[idx].lastChapter = title || merged[idx].lastChapter;
+                merged[idx].appearances = (merged[idx].appearances || 0) + 1;
+                if (JSON.stringify(merged[idx]) !== before) updated.push(merged[idx].name);
+            } else {
+                merged.push({
+                    id: uid(),
+                    name,
+                    role: item.role === '主角' ? '主角' : 'NPC',
+                    identity: item.identity || '', appearance: item.appearance || '',
+                    personality: item.personality || '', relation: item.relation || '',
+                    keyword: item.keyword || name,
+                    firstChapter: title || '', lastChapter: title || '', appearances: 1
+                });
+                added.push(name);
+            }
+        }
+        characters[novelId] = merged;
+        saveJson(CHARACTERS_FILE, characters);
+        res.json({ success: true, characters: merged, added, updated });
+    } catch (e) {
+        if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') return;
+        console.error('人物解析失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 获取人物库
+app.get('/api/characters', (req, res) => {
+    const nid = req.query.novelId;
+    const list = nid ? (characters[nid] || []) : [];
+    res.json({ success: true, characters: list });
+});
+
+// 手动编辑/删除人物
+app.post('/api/characters/save', (req, res) => {
+    const { novelId, characters: newList } = req.body;
+    if (!novelId || !Array.isArray(newList)) return res.status(400).json({ error: '参数错误' });
+    characters[novelId] = newList.filter(c => c && c.name);
+    saveJson(CHARACTERS_FILE, characters);
+    res.json({ success: true, characters: characters[novelId] });
+});
+
+// ---- 小说导出（配图完整迁移到另一台设备）----
+app.get('/api/novels/:id/export', (req, res) => {
+    try {
+        const nid = req.params.id;
+        const novel = novels.find(n => n.id === nid);
+        if (!novel) return res.status(404).json({ error: '小说不存在' });
+        const novelChapters = chapters.filter(c => c.novelId === nid);
+        const novelIllus = illustrations.filter(i => i.novelId === nid);
+        // 收集所有本地图片（章节内 + 插图库）转 base64
+        const images = {}; // { '/images/xxx': 'data:image/...;base64,...' }
+        const addImage = (url) => {
+            if (!url || typeof url !== 'string') return;
+            // 章节内容里的 markdown 引用
+            if (url.startsWith('/images/')) {
+                const clean = url.split('?')[0];
+                const fp = path.join(__dirname, decodeURIComponent(clean));
+                if (fs.existsSync(fp)) {
+                    const mime = clean.endsWith('.png') ? 'image/png' : clean.endsWith('.jpg') || clean.endsWith('.jpeg') ? 'image/jpeg' : clean.endsWith('.webp') ? 'image/webp' : 'image/png';
+                    images[clean] = `data:${mime};base64,${fs.readFileSync(fp).toString('base64')}`;
+                }
+            }
+        };
+        novelChapters.forEach(c => extractLocalImages(c.content || '').forEach(addImage));
+        novelIllus.forEach(i => addImage(i.image));
+        const payload = {
+            type: 'novel-reader-export',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            novel,
+            chapters: novelChapters,
+            illustrations: novelIllus,
+            roles: roles[nid] || [],
+            characters: characters[nid] || [],
+            images
+        };
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="novel_${encodeURIComponent(novel.name)}_export.json"`);
+        res.json(payload);
+    } catch (e) {
+        console.error('导出失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 小说导入（从导出文件恢复）----
+app.post('/api/novels/import', async (req, res) => {
+    try {
+        const p = req.body;
+        if (!p || p.type !== 'novel-reader-export') return res.status(400).json({ error: '不是有效的导出文件' });
+        // 恢复图片：base64 → 文件（保持 /images/... 路径）
+        if (p.images && typeof p.images === 'object') {
+            for (const [url, dataUri] of Object.entries(p.images)) {
+                if (!dataUri || typeof dataUri !== 'string') continue;
+                const comma = dataUri.indexOf(',');
+                if (comma === -1) continue;
+                const buf = Buffer.from(dataUri.slice(comma + 1), 'base64');
+                const clean = url.split('?')[0];
+                const fp = path.join(__dirname, decodeURIComponent(clean));
+                // 只允许写回 images 目录，防路径穿越
+                if (!fp.startsWith(path.join(__dirname, 'images'))) continue;
+                fs.mkdirSync(path.dirname(fp), { recursive: true });
+                fs.writeFileSync(fp, buf);
+            }
+        }
+        // 写入小说
+        const novel = { ...p.novel };
+        // 若已存在同名小说则追加时间戳避免冲突
+        if (novels.some(n => n.id === novel.id)) {
+            novel.id = 'n' + Date.now();
+        }
+        novels.unshift(novel);
+        // 写入章节（把旧 id 对应的 novelId 改为新 id）
+        const newId = novel.id;
+        const newChapters = (p.chapters || []).map(c => ({ ...c, novelId: newId }));
+        newChapters.forEach(c => { if (!c._id) c._id = uid(); });
+        const newIllus = (p.illustrations || []).map(i => ({ ...i, novelId: newId }));
+        newIllus.forEach(i => { if (!i.id) i.id = uid(); });
+        chapters.push(...newChapters);
+        illustrations.push(...newIllus);
+        roles[newId] = (p.roles || []).filter(r => r && r.name && r.desc);
+        characters[newId] = (p.characters || []).filter(c => c && c.name);
+        saveJson(NOVELS_FILE, novels);
+        saveJson(CHAPTERS_FILE, chapters);
+        saveJson(ILLUS_FILE, illustrations);
+        saveJson(ROLES_FILE, roles);
+        saveJson(CHARACTERS_FILE, characters);
+        console.log(`📥 已导入小说《${novel.name}》（${newChapters.length}章）`);
+        res.json({ success: true, novel, importedChapters: newChapters.length, importedImages: Object.keys(p.images || {}).length });
+    } catch (e) {
+        console.error('导入失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/chapters', (req, res) => {
