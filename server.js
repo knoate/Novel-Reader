@@ -179,9 +179,10 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 1. 找出 1-5 个最适合配图的场景
 2. 每个场景包含：人物、动作、环境、氛围、光影
 3. 生成英文绘图提示词（用于 AI 绘画）
-4. 用原文中的一句话标注场景位置（anchor）
+4. anchor 字段必须严格逐字摘自原文中某一句话的连续片段（10-30 个字符），禁止改写、概括、拼接或添加任何字符，必须与原文一字不差
+5. anchor 必须在章节中唯一（不要选重复出现的短语）
 只输出 JSON 数组，不要任何解释：
-[{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文定位句"}]`;
+[{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文逐字连续片段"}]`;
 
 async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal, opts = {}) {
     if (!LLM_API_KEY) {
@@ -213,7 +214,17 @@ async function analyzeChapters(title, content, model, instruction = '', maxScene
             console.warn(`⚠️ 第 ${i + 1} 段分析失败:`, e.message);
         }
     }
-    return allScenes.slice(0, maxScenes);
+    return attachSceneOffsets(allScenes.slice(0, maxScenes), content);
+}
+
+// 为场景补上 anchor 在原文中的精确偏移量（供前端精准插入，避免图片堆到章节末尾）
+function attachSceneOffsets(scenes, content) {
+    return (scenes || []).map(sc => {
+        if (!sc || !sc.anchor) return sc;
+        const anchor = String(sc.anchor).trim();
+        const pos = content.indexOf(anchor);
+        return { ...sc, offset: pos >= 0 ? pos : -1, anchor };
+    });
 }
 
 // ============================================================

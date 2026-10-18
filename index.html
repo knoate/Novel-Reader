@@ -120,6 +120,8 @@
                 <button class="primary-btn" id="importBtn">📥 导入小说</button>
                 <button id="expandAllBtn">展开全部</button>
                 <button id="collapseAllBtn">收起全部</button>
+                <button id="chListTopBtn" title="章节列表滚到顶部" style="min-width:44px;">⏫ 顶部</button>
+                <button id="chListBottomBtn" title="章节列表滚到底部" style="min-width:44px;">⏬ 底部</button>
             </div>
         </aside>
 
@@ -563,8 +565,18 @@
                     const { title, content, wordCount } = event.data.payload;
                     const exists = chapters.some(ch => ch.content === content);
                     if (!exists) {
-                        chapters.push({ title, content, wordCount: wordCount || content.length });
-                        currentIndex = chapters.length - 1;
+                        // 插入到当前章节下面（currentIndex 之后）；未打开章节则追加到末尾
+                        let newCh;
+                        if (currentIndex >= 0 && chapters[currentIndex]) {
+                            const insertAt = currentIndex + 1;
+                            newCh = { title, content, wordCount: wordCount || content.length };
+                            chapters.splice(insertAt, 0, newCh);
+                            currentIndex = insertAt;
+                        } else {
+                            newCh = { title, content, wordCount: wordCount || content.length };
+                            chapters.push(newCh);
+                            currentIndex = chapters.length - 1;
+                        }
                         renderContent();
                         // 保存到后端
                         try {
@@ -573,9 +585,18 @@
                                 body: JSON.stringify({ title, content, novelId: currentNovelId })
                             });
                             const data = await r.json();
-                            if (data.success && data.chapter) chapters[chapters.length - 1]._id = data.chapter.id;
+                            if (data.success && data.chapter) {
+                                newCh._id = data.chapter.id;
+                                // 用 reorder 同步新章节的插入位置（保持和后端一致）
+                                const order = chapters.map(c => c._id).filter(Boolean);
+                                await fetch(`${API_BASE}/api/chapters/reorder`, {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ novelId: currentNovelId, order })
+                                });
+                                renderSidebar();
+                            }
                         } catch (e) { console.warn('保存章节失败:', e); }
-                        showToast(`✅ 已导入「${title}」`);
+                        showToast(`✅ 已导入「${title}」到当前章节下方`);
                     } else {
                         showToast('⚠️ 该章节已存在，跳过导入');
                     }
@@ -943,7 +964,7 @@
                             const imageUrl = genData.image?.url || genData.image;
                             const ts = Date.now() - ts0;
                             logLine(`  ✅ 场景${i+1}成功（${t(ts)}）`);
-                            results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '' };
+                            results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '', offset: scene.offset, __i: i };
                             insertedCount++;
                             lastErr = null;
                             break;
@@ -958,7 +979,7 @@
                     if (lastErr) {
                         const ts = Date.now() - ts0;
                         logLine(`  ❌ 场景${i+1}失败（${t(ts)}）: ${(lastErr.message||'').slice(0,80)}`);
-                        results[i] = { ok: false, error: lastErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '' };
+                        results[i] = { ok: false, error: lastErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '', offset: scene.offset, __i: i };
                         failedCount++;
                     }
                 }
@@ -972,20 +993,26 @@
                 }
 
                 // === 第三步：统一插入结果到章节 ===
+                // 先在原始内容上算出每个场景的插入位置，再从后往前插入，避免位置偏移
+                const insertPlans = [];
                 for (let i = 0; i < results.length; i++) {
                     const r = results[i];
                     if (!r) continue;
                     let insertPos = ch.content.length;
-                    if (r.anchor && r.anchor.trim()) {
+                    // 优先用后端返回的 anchor 精确偏移量（最可靠）
+                    if (typeof r.offset === 'number' && r.offset >= 0 && r.offset <= ch.content.length) {
+                        insertPos = r.offset;
+                        let e = ch.content.indexOf('\n\n', insertPos + (r.anchor ? r.anchor.length : 0));
+                        if (e===-1) e = ch.content.indexOf('\n', insertPos + (r.anchor ? r.anchor.length : 0));
+                        if (e===-1) e = ch.content.length;
+                        insertPos = e;
+                    } else if (r.anchor && r.anchor.trim()) {
                         const anchor = r.anchor.trim();
-                        // 1) 精确匹配 anchor 定位句
                         let pos = ch.content.indexOf(anchor);
-                        // 2) 模糊回退：anchor 可能被 AI 轻微改写，取前段关键词再找
                         if (pos === -1 && anchor.length > 6) {
                             const frag = anchor.slice(0, 8);
                             pos = ch.content.indexOf(frag);
                             if (pos === -1) {
-                                // 用 anchor 里第一个 6 字词再试
                                 const frag2 = anchor.slice(0, 6);
                                 pos = ch.content.indexOf(frag2);
                             }
@@ -999,11 +1026,16 @@
                             logLine(`  ⚠️ 场景「${escapeHtml(r.sceneLabel)}」定位句未匹配到原文，图片将插到章节末尾`);
                         }
                     }
+                    insertPlans.push({ r, insertPos });
+                }
+                // 从后往前插入（位置大的先插，保证小位置不受影响）
+                insertPlans.sort((a, b) => b.insertPos - a.insertPos);
+                for (const { r, insertPos } of insertPlans) {
                     if (r.ok) {
                         const infoHtml = `<div class="prompt-text"><div>📝 场景：${escapeHtml(r.sceneLabel)}</div><div>📌 提示词：${escapeHtml(r.promptText)}</div></div>`;
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n![${escapeHtml(r.sceneLabel)}](${r.imageUrl})\n${infoHtml}\n---\n` + ch.content.slice(insertPos);
                     } else {
-                        const failId = 'fail-' + Date.now() + '-' + i;
+                        const failId = 'fail-' + Date.now() + '-' + r.__i;
                         const errHtml = `<div style="font-size:12px;color:#f87171;background:#2a1414;padding:6px 8px;border-radius:4px;margin-bottom:8px;">❌ ${escapeHtml(r.error)}</div>`;
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(r.promptText)}" data-label="${escapeHtml(r.sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(r.sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(r.promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
                     }
@@ -1292,6 +1324,17 @@
         closeModalBtn.addEventListener('click', closeImportModal);
         importModal.addEventListener('click', (e) => {
             if (e.target === importModal) closeImportModal();
+        });
+
+        // 章节列表滚到顶部/底部
+        const chListEl = document.getElementById('chapterListSidebar');
+        document.getElementById('chListTopBtn').addEventListener('click', () => {
+            chListEl.scrollTo({ top: 0, behavior: 'smooth' });
+            document.body.classList.remove('sidebar-open');
+        });
+        document.getElementById('chListBottomBtn').addEventListener('click', () => {
+            chListEl.scrollTo({ top: chListEl.scrollHeight, behavior: 'smooth' });
+            document.body.classList.remove('sidebar-open');
         });
 
         // 移动端汉堡菜单：开合侧边栏
