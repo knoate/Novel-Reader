@@ -1131,7 +1131,6 @@
         });
         grokRatio.addEventListener('change', saveGrokConfig);
         loadGrokConfig();
-        refreshGrokProfileSelect();
 
         function getGrokConfig() {
             const [w, h] = (grokRatio.value || '1024x1024').split('x').map(Number);
@@ -1208,6 +1207,7 @@
             refreshGrokProfileSelect();
             showToast(`🗑️ 已删除「${name}」`, 'success');
         });
+        refreshGrokProfileSelect(); // 初始化方案下拉（必须在 GROK_ACTIVE_KEY 定义之后）
 
         // ✅ NovelAI 配置自动保存（同步到 api_config.novelai）
         const naiUrlEl = document.getElementById('naiUrl');
