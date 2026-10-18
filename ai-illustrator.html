@@ -439,6 +439,15 @@
                 • <code>触发词=前置|额外词</code>：出现「触发词」时在最前面加上「额外词」<br>
                 • <code>触发词=后置|额外词</code>：出现「触发词」时在最后面加上「额外词」</div>
             </div>
+            <div class="tpl-field">
+                <label>👤 角色设定库（每行一个，格式：角色名：外貌、服装、气质）
+                    <select id="roleNovelSelect" style="margin-left:8px;padding:4px 8px;background:#0a0a14;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;font-size:12px;"></select>
+                </label>
+                <textarea id="roleCards" style="min-height:100px;font-family:monospace;font-size:12px;" placeholder="例如：
+林晚秋：一袭月白长裙，乌黑长发及腰，清冷孤傲，眼角有颗泪痣
+顾北辰：玄色锦袍，剑眉星目，身形挺拔，气宇轩昂，佩一柄青锋剑"></textarea>
+                <div class="tpl-hint">💡 章节没写角色外貌时，AI 会按这里设定生成，保证同一角色跨章节形象一致。选上面小说后自动加载/保存该小说的角色。</div>
+            </div>
         </div>
 
         <!-- Grok/Banana 配置 -->
@@ -452,6 +461,15 @@
                 <label>API Key</label>
                 <input type="password" id="grokKey" placeholder="sk-..." style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
             </div>
+            <!-- Grok 配置方案（多套保存/切换） -->
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+                <select id="grokProfileSelect" style="flex:1;min-width:140px;padding:8px 10px;border-radius:6px;border:1px solid #2a2a4a;background:#0a0a14;color:#e0e0e0;font-size:13px;">
+                    <option value="">— 选择已保存的方案 —</option>
+                </select>
+                <button id="saveGrokProfileBtn" style="padding:8px 14px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:6px;cursor:pointer;font-size:13px;">💾 存为方案</button>
+                <button id="delGrokProfileBtn" style="padding:8px 14px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:6px;cursor:pointer;font-size:13px;">🗑️ 删除</button>
+            </div>
+            <div class="tpl-hint">💡 可保存多套 Grok/Banana 接口配置（不同路由/中转），随时切换。</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 <div class="tpl-field" style="flex:1;min-width:160px;">
                     <label>图像模型 <button type="button" id="grokFetchModelsBtn" title="从接口拉取模型列表" style="padding:1px 8px;font-size:11px;cursor:pointer;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:10px;margin-left:4px;">🔄 拉取</button></label>
@@ -782,7 +800,8 @@
                     model: modelName,
                     width: config.novelai?.width || 832,
                     height: config.novelai?.height || 1216,
-                    ...getAnalyzerRule()
+                    ...getAnalyzerRule(),
+                    roles: getRoles()
                 };
                 if (engine === 'grok') Object.assign(requestBody, getGrokConfig());
                 if (engine === 'novelai') {
@@ -1011,6 +1030,71 @@
         loadFixedPrompts();
         loadAnalyzerRule();
 
+        // ============================================================
+        //  6.5.5 角色设定库
+        // ============================================================
+        const roleCardsEl = document.getElementById('roleCards');
+        const roleNovelSelect = document.getElementById('roleNovelSelect');
+        let roleNovelId = (new URLSearchParams(location.search).get('novelId')) || '';
+        // 角色数组 → 文本 / 文本 → 角色数组
+        function rolesToText(roles) { return (roles || []).map(r => `${r.name}：${r.desc}`).join('\n'); }
+        function textToRoles(text) {
+            const out = [];
+            for (const line of (text || '').split('\n')) {
+                const s = line.trim();
+                if (!s) continue;
+                const idx = s.indexOf('：');
+                const idx2 = s.indexOf(':');
+                const sep = (idx !== -1 && (idx2 === -1 || idx < idx2)) ? idx : idx2;
+                if (sep === -1) continue;
+                const name = s.slice(0, sep).trim();
+                const desc = s.slice(sep + 1).trim();
+                if (name && desc) out.push({ name, desc });
+            }
+            return out;
+        }
+        async function loadRoleNovels() {
+            try {
+                const r = await fetch(`${API_BASE}/api/novels`);
+                const d = await r.json();
+                const novels = d.success ? (d.novels || []) : [];
+                roleNovelSelect.innerHTML = '<option value="">— 选择小说 —</option>';
+                for (const n of novels) {
+                    const opt = document.createElement('option');
+                    opt.value = n.id;
+                    opt.textContent = n.name;
+                    if (n.id === roleNovelId) opt.selected = true;
+                    roleNovelSelect.appendChild(opt);
+                }
+            } catch (e) {}
+        }
+        async function loadRoleCards() {
+            if (!roleNovelId) { roleCardsEl.value = ''; return; }
+            try {
+                const r = await fetch(`${API_BASE}/api/roles?novelId=${encodeURIComponent(roleNovelId)}`);
+                const d = await r.json();
+                roleCardsEl.value = d.success ? rolesToText(d.roles) : '';
+            } catch (e) {}
+        }
+        async function saveRoleCards() {
+            if (!roleNovelId) return;
+            const newRoles = textToRoles(roleCardsEl.value);
+            try {
+                await fetch(`${API_BASE}/api/roles`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ novelId: roleNovelId, roles: newRoles })
+                });
+            } catch (e) {}
+        }
+        roleNovelSelect.addEventListener('change', async (e) => {
+            roleNovelId = e.target.value;
+            await loadRoleCards();
+        });
+        roleCardsEl.addEventListener('input', () => { clearTimeout(roleCardsEl._t); roleCardsEl._t = setTimeout(saveRoleCards, 400); });
+        loadRoleNovels();
+        loadRoleCards();
+        function getRoles() { return textToRoles(roleCardsEl.value); }
+
         function getAnalyzerRule() {
             return { analyzeTemplate: tplAnalyzer.value.trim() };
         }
@@ -1047,6 +1131,7 @@
         });
         grokRatio.addEventListener('change', saveGrokConfig);
         loadGrokConfig();
+        refreshGrokProfileSelect();
 
         function getGrokConfig() {
             const [w, h] = (grokRatio.value || '1024x1024').split('x').map(Number);
@@ -1057,6 +1142,72 @@
                 width: w, height: h
             };
         }
+
+        // ✅ Grok 配置方案（多套保存/切换路由）
+        const GROK_PROFILES_KEY = 'grok_profiles';
+        const GROK_ACTIVE_KEY = 'grok_active_profile';
+        function loadGrokProfiles() {
+            try { return JSON.parse(localStorage.getItem(GROK_PROFILES_KEY) || '{}'); }
+            catch (e) { return {}; }
+        }
+        function saveGrokProfiles(p) {
+            localStorage.setItem(GROK_PROFILES_KEY, JSON.stringify(p));
+        }
+        function refreshGrokProfileSelect() {
+            const sel = document.getElementById('grokProfileSelect');
+            if (!sel) return;
+            const profiles = loadGrokProfiles();
+            const active = localStorage.getItem(GROK_ACTIVE_KEY) || '';
+            sel.innerHTML = '<option value="">— 选择已保存的方案 —</option>';
+            for (const name of Object.keys(profiles)) {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                if (name === active) opt.selected = true;
+                sel.appendChild(opt);
+            }
+        }
+        document.getElementById('grokProfileSelect').addEventListener('change', (e) => {
+            const name = e.target.value;
+            if (!name) return;
+            const profiles = loadGrokProfiles();
+            const p = profiles[name];
+            if (!p) return;
+            grokUrl.value = p.apiUrl || '';
+            grokKey.value = p.apiKey || '';
+            grokModel.value = p.model || '';
+            grokRatio.value = p.ratio || '1024x1024';
+            localStorage.setItem(GROK_ACTIVE_KEY, name);
+            saveGrokConfig();
+            renderGrokChips();
+            showToast(`✅ 已切换到「${name}」`, 'success');
+        });
+        document.getElementById('saveGrokProfileBtn').addEventListener('click', () => {
+            const name = prompt('给这个配置起个名字：');
+            if (!name || !name.trim()) return;
+            const profiles = loadGrokProfiles();
+            profiles[name.trim()] = {
+                apiUrl: grokUrl.value.trim(),
+                apiKey: grokKey.value.trim(),
+                model: grokModel.value.trim(),
+                ratio: grokRatio.value
+            };
+            saveGrokProfiles(profiles);
+            localStorage.setItem(GROK_ACTIVE_KEY, name.trim());
+            refreshGrokProfileSelect();
+            showToast(`💾 已保存方案「${name.trim()}」`, 'success');
+        });
+        document.getElementById('delGrokProfileBtn').addEventListener('click', () => {
+            const name = document.getElementById('grokProfileSelect').value;
+            if (!name) { showToast('⚠️ 请先选择要删除的方案', 'warn'); return; }
+            if (!confirm(`确定删除方案「${name}」吗？`)) return;
+            const profiles = loadGrokProfiles();
+            delete profiles[name];
+            saveGrokProfiles(profiles);
+            localStorage.removeItem(GROK_ACTIVE_KEY);
+            refreshGrokProfileSelect();
+            showToast(`🗑️ 已删除「${name}」`, 'success');
+        });
 
         // ✅ NovelAI 配置自动保存（同步到 api_config.novelai）
         const naiUrlEl = document.getElementById('naiUrl');
