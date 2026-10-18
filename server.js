@@ -49,7 +49,6 @@ const CHAPTERS_FILE = path.join(DATA_DIR, 'chapters.json');
 const ILLUS_FILE = path.join(DATA_DIR, 'illustrations.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const ROLES_FILE = path.join(DATA_DIR, 'roles.json');
-const CHARACTERS_FILE = path.join(DATA_DIR, 'characters.json');
 
 function loadJson(file, fallback) {
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -92,7 +91,6 @@ let chapters = loadJson(CHAPTERS_FILE, []);
 let illustrations = loadJson(ILLUS_FILE, []);
 let statsLog = loadJson(STATS_FILE, []);
 let roles = loadJson(ROLES_FILE, {}); // { novelId: [{ name, desc }] }
-let characters = loadJson(CHARACTERS_FILE, {}); // { novelId: [{ name, role, identity, appearance, personality, relation, firstChapter, appearances, lastChapter }] }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 function logStat(engine, success) {
@@ -179,10 +177,9 @@ const ANALYZE_SYSTEM = `你是一位专业的小说插画师和图像分析师�
 1. 找出 1-5 个最适合配图的场景
 2. 每个场景包含：人物、动作、环境、氛围、光影
 3. 生成英文绘图提示词（用于 AI 绘画）
-4. anchor 字段必须严格逐字摘自原文中某一句话的连续片段（10-30 个字符），禁止改写、概括、拼接或添加任何字符，必须与原文一字不差
-5. anchor 必须在章节中唯一（不要选重复出现的短语）
+4. 用原文中的一句话标注场景位置（anchor）
 只输出 JSON 数组，不要任何解释：
-[{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文逐字连续片段"}]`;
+[{"scene":"中文场景描述","prompt":"英文绘图提示词","anchor":"原文定位句"}]`;
 
 async function analyzeChapters(title, content, model, instruction = '', maxScenes = 5, signal, opts = {}) {
     if (!LLM_API_KEY) {
@@ -214,17 +211,7 @@ async function analyzeChapters(title, content, model, instruction = '', maxScene
             console.warn(`⚠️ 第 ${i + 1} 段分析失败:`, e.message);
         }
     }
-    return attachSceneOffsets(allScenes.slice(0, maxScenes), content);
-}
-
-// 为场景补上 anchor 在原文中的精确偏移量（供前端精准插入，避免图片堆到章节末尾）
-function attachSceneOffsets(scenes, content) {
-    return (scenes || []).map(sc => {
-        if (!sc || !sc.anchor) return sc;
-        const anchor = String(sc.anchor).trim();
-        const pos = content.indexOf(anchor);
-        return { ...sc, offset: pos >= 0 ? pos : -1, anchor };
-    });
+    return allScenes.slice(0, maxScenes);
 }
 
 // ============================================================
@@ -524,12 +511,10 @@ app.delete('/api/novels/:id', (req, res) => {
     illustrations = illustrations.filter(i => i.novelId !== nid);
     novels = novels.filter(n => n.id !== nid);
     delete roles[nid];
-    delete characters[nid];
     saveJson(CHAPTERS_FILE, chapters);
     saveJson(ILLUS_FILE, illustrations);
     saveJson(NOVELS_FILE, novels);
     saveJson(ROLES_FILE, roles);
-    saveJson(CHARACTERS_FILE, characters);
     res.json({ success: true });
 });
 
@@ -545,101 +530,6 @@ app.post('/api/roles', (req, res) => {
     roles[novelId] = Array.isArray(newRoles) ? newRoles.filter(r => r && r.name && r.desc) : [];
     saveJson(ROLES_FILE, roles);
     res.json({ success: true, roles: roles[novelId] });
-});
-
-// ============================================================
-//  人物信息库（AI 解析章节，增量更新主角/NPC 表）
-// ============================================================
-const CHARACTER_SYSTEM = `你是一位资深的小说角色分析师。请分析给定章节中出现的所有人，识别出：
-1. name：人物姓名（无姓名则用最显著称呼）
-2. role：人物类型，仅填 "主角" 或 "NPC"
-3. identity：身份/职业/地位
-4. appearance：外貌描写（无则留空）
-5. personality：性格特征（无则留空）
-6. relation：与主角或故事的关系
-7. keyword：该人物在章节中最典型的一个称呼或特征词（用于后续识别）
-只输出 JSON 数组，不要任何解释，格式：
-[{"name":"","role":"主角","identity":"","appearance":"","personality":"","relation":"","keyword":""}]`;
-
-app.post('/api/characters/analyze', async (req, res) => {
-    const ctrl = new AbortController();
-    res.on('close', () => { if (!res.writableEnded) ctrl.abort(); });
-    try {
-        const { novelId, content, title, model } = req.body;
-        if (!novelId || !content) return res.status(400).json({ error: '缺少 novelId 或章节内容' });
-        const opts = { apiUrl: req.body.llmApiUrl || '', apiKey: req.body.llmApiKey || '' };
-        // 传已有角色库作为参考（增量更新）
-        const existing = characters[novelId] || [];
-        const existingInfo = existing.map(c => `- ${c.name}（${c.role}，${c.identity||''}，${c.appearance||''}，${c.personality||''}）`).join('\n');
-        const prompt = `${CHARACTER_SYSTEM}\n\n【该小说已识别的角色（用于去重和补充信息，不要重复新增）】\n${existingInfo || '（暂无）'}\n\n【章节标题】${title || ''}\n【章节内容】\n${content.slice(0, 6000)}`;
-        const text = await callLlm(prompt, model, ctrl.signal, opts);
-        // 解析 JSON
-        let arr = [];
-        try {
-            const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-            const candidate = fence ? fence[1] : text;
-            const m = candidate.match(/\[[\s\S]*\]/);
-            arr = JSON.parse(m ? m[0] : candidate);
-        } catch (e) {
-            return res.status(500).json({ error: 'AI 返回无法解析的人物数据' });
-        }
-        if (!Array.isArray(arr)) return res.status(500).json({ error: 'AI 未返回人物数组' });
-
-        // 增量合并
-        const cur = characters[novelId] || [];
-        const merged = cur.slice();
-        let added = [], updated = [];
-        for (const item of arr) {
-            const name = (item.name || '').trim();
-            if (!name) continue;
-            const idx = merged.findIndex(c => c.name === name);
-            if (idx >= 0) {
-                // 更新：补充缺失字段
-                const before = JSON.stringify(merged[idx]);
-                for (const k of ['identity','appearance','personality','relation']) {
-                    if (item[k] && !merged[idx][k]) merged[idx][k] = item[k];
-                }
-                if (item.role === '主角' && merged[idx].role !== '主角') merged[idx].role = '主角';
-                merged[idx].lastChapter = title || merged[idx].lastChapter;
-                merged[idx].appearances = (merged[idx].appearances || 0) + 1;
-                if (JSON.stringify(merged[idx]) !== before) updated.push(merged[idx].name);
-            } else {
-                merged.push({
-                    id: uid(),
-                    name,
-                    role: item.role === '主角' ? '主角' : 'NPC',
-                    identity: item.identity || '', appearance: item.appearance || '',
-                    personality: item.personality || '', relation: item.relation || '',
-                    keyword: item.keyword || name,
-                    firstChapter: title || '', lastChapter: title || '', appearances: 1
-                });
-                added.push(name);
-            }
-        }
-        characters[novelId] = merged;
-        saveJson(CHARACTERS_FILE, characters);
-        res.json({ success: true, characters: merged, added, updated });
-    } catch (e) {
-        if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') return;
-        console.error('人物解析失败:', e.message);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// 获取人物库
-app.get('/api/characters', (req, res) => {
-    const nid = req.query.novelId;
-    const list = nid ? (characters[nid] || []) : [];
-    res.json({ success: true, characters: list });
-});
-
-// 手动编辑/删除人物
-app.post('/api/characters/save', (req, res) => {
-    const { novelId, characters: newList } = req.body;
-    if (!novelId || !Array.isArray(newList)) return res.status(400).json({ error: '参数错误' });
-    characters[novelId] = newList.filter(c => c && c.name);
-    saveJson(CHARACTERS_FILE, characters);
-    res.json({ success: true, characters: characters[novelId] });
 });
 
 // ---- 小说导出（配图完整迁移到另一台设备）----
@@ -674,7 +564,6 @@ app.get('/api/novels/:id/export', (req, res) => {
             chapters: novelChapters,
             illustrations: novelIllus,
             roles: roles[nid] || [],
-            characters: characters[nid] || [],
             images
         };
         res.setHeader('Content-Type', 'application/json');
@@ -722,12 +611,10 @@ app.post('/api/novels/import', async (req, res) => {
         chapters.push(...newChapters);
         illustrations.push(...newIllus);
         roles[newId] = (p.roles || []).filter(r => r && r.name && r.desc);
-        characters[newId] = (p.characters || []).filter(c => c && c.name);
         saveJson(NOVELS_FILE, novels);
         saveJson(CHAPTERS_FILE, chapters);
         saveJson(ILLUS_FILE, illustrations);
         saveJson(ROLES_FILE, roles);
-        saveJson(CHARACTERS_FILE, characters);
         console.log(`📥 已导入小说《${novel.name}》（${newChapters.length}章）`);
         res.json({ success: true, novel, importedChapters: newChapters.length, importedImages: Object.keys(p.images || {}).length });
     } catch (e) {

@@ -5,25 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📖 小说阅读器</title>
     <link rel="stylesheet" href="style.css">
-    <!-- 阅读字体：动态加载（手机端通用），失败不影响主功能 -->
-    <script>
-        (function () {
-            var fonts = [
-                'https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css',
-                'https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.1.1/400.css',
-                'https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.1.1/400.css'
-            ];
-            function loadFont(u) {
-                var l = document.createElement('link');
-                l.rel = 'stylesheet'; l.href = u;
-                l.onerror = function () { /* CDN 失败，静默忽略 */ };
-                document.head.appendChild(l);
-            }
-            // 页面空闲/加载后注入，避免阻塞
-            if (window.requestIdleCallback) window.requestIdleCallback(function () { fonts.forEach(loadFont); });
-            else window.addEventListener('load', function () { fonts.forEach(loadFont); });
-        })();
-    </script>
     <style>
         /* 配图提示词隐藏/显示 */
         .content-area .prompt-text {
@@ -95,18 +76,19 @@
                 <h2>📚 章节列表</h2>
                 <span class="badge" id="chapterCount">0 章</span>
             </div>
-            <div id="novelSelector" style="padding:6px 10px;border-bottom:1px solid #2a2a4a;">
-                <select id="novelSelect" style="width:100%;padding:5px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
-                <div style="display:flex;gap:5px;margin-top:5px;">
+            <div id="novelSelector" style="padding:8px 12px;border-bottom:1px solid #2a2a4a;">
+                <select id="novelSelect" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
+                <div style="display:flex;gap:6px;margin-top:6px;">
                     <button id="newNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">➕ 新建</button>
                     <button id="renameNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
                     <button id="delNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
                 </div>
-                <div style="display:flex;gap:5px;margin-top:5px;">
-                    <button id="roleCardsBtn" title="角色设定" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色</button>
-                    <button id="charactersBtn" title="人物库" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#7dd3fc;border:1px solid #38bdf8;border-radius:5px;cursor:pointer;">🧑 人物库</button>
-                    <button id="exportNovelBtn" title="导出" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
-                    <button id="importNovelBtn" title="导入" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
+                <div style="margin-top:6px;">
+                    <button id="roleCardsBtn" style="width:100%;font-size:12px;padding:5px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色设定（当前小说）</button>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="exportNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
+                    <button id="importNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
                     <input type="file" id="importNovelFile" accept=".json,application/json" style="display:none;">
                 </div>
             </div>
@@ -120,8 +102,6 @@
                 <button class="primary-btn" id="importBtn">📥 导入小说</button>
                 <button id="expandAllBtn">展开全部</button>
                 <button id="collapseAllBtn">收起全部</button>
-                <button id="chListTopBtn" title="章节列表滚到顶部" style="min-width:44px;">⏫ 顶部</button>
-                <button id="chListBottomBtn" title="章节列表滚到底部" style="min-width:44px;">⏬ 底部</button>
             </div>
         </aside>
 
@@ -180,15 +160,10 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
     <!-- AI 进度浮层 -->
-    <div id="aiProgressPanel" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#1a1410;border:1px solid #ffd866;border-radius:10px;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:13px;">
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 4px;cursor:pointer;" onclick="toggleAiProgress()" title="点击收起/展开">
-            <span style="color:#ffd866;font-weight:bold;flex:1;">⏳ <span id="aiProgressTitle">处理中...</span></span>
-            <span id="aiCollapseBtn" style="font-size:14px;color:#888;cursor:pointer;user-select:none;">—</span>
-        </div>
-        <div id="aiProgressLog" style="color:#aaa;line-height:1.9;max-height:200px;overflow-y:auto;font-size:12px;padding:0 14px 14px;"></div>
+    <div id="aiProgressPanel" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#1a1410;border:1px solid #ffd866;border-radius:10px;padding:14px 16px;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:13px;">
+        <div style="color:#ffd866;font-weight:bold;margin-bottom:8px;">⏳ <span id="aiProgressTitle">处理中...</span></div>
+        <div id="aiProgressLog" style="color:#aaa;line-height:1.9;max-height:200px;overflow-y:auto;font-size:12px;"></div>
     </div>
-    <!-- AI 进度收起后的恢复按钮 -->
-    <button id="aiProgressRestore" onclick="toggleAiProgress()" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#7c3aed;color:#fff;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,0.5);" title="展开配图进度">🎨</button>
 
     <!-- ====== 导入模态框 ====== -->
     <div class="modal-overlay" id="importModal">
@@ -198,24 +173,6 @@
                 <button class="close-btn" id="closeModalBtn">✕</button>
             </div>
             <div class="modal-body" id="modalBody"></div>
-        </div>
-    </div>
-
-    <!-- ====== 人物库模态框 ====== -->
-    <div class="modal-overlay" id="charModal">
-        <div class="modal-content" style="width:min(720px,94vw);max-height:90vh;display:flex;flex-direction:column;">
-            <div class="modal-header">
-                <h3 id="charModalTitle">🧑 人物信息库</h3>
-                <button class="close-btn" id="closeCharModalBtn">✕</button>
-            </div>
-            <div style="padding:8px 4px 0;">
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    <button id="charAnalyzeBtn" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;">✨ 解析当前章节人物</button>
-                    <span id="charAnalyzeStatus" style="font-size:12px;color:#888;"></span>
-                </div>
-                <div style="margin-top:8px;color:#666;font-size:12px;">💡 点「解析当前章节人物」，AI 会自动识别本章出现的人物并更新到下面的表格（主角表 + NPC 表）。</div>
-            </div>
-            <div id="charModalBody" style="flex:1;overflow-y:auto;padding:12px 4px;"></div>
         </div>
     </div>
 
@@ -565,18 +522,8 @@
                     const { title, content, wordCount } = event.data.payload;
                     const exists = chapters.some(ch => ch.content === content);
                     if (!exists) {
-                        // 插入到当前章节下面（currentIndex 之后）；未打开章节则追加到末尾
-                        let newCh;
-                        if (currentIndex >= 0 && chapters[currentIndex]) {
-                            const insertAt = currentIndex + 1;
-                            newCh = { title, content, wordCount: wordCount || content.length };
-                            chapters.splice(insertAt, 0, newCh);
-                            currentIndex = insertAt;
-                        } else {
-                            newCh = { title, content, wordCount: wordCount || content.length };
-                            chapters.push(newCh);
-                            currentIndex = chapters.length - 1;
-                        }
+                        chapters.push({ title, content, wordCount: wordCount || content.length });
+                        currentIndex = chapters.length - 1;
                         renderContent();
                         // 保存到后端
                         try {
@@ -585,18 +532,9 @@
                                 body: JSON.stringify({ title, content, novelId: currentNovelId })
                             });
                             const data = await r.json();
-                            if (data.success && data.chapter) {
-                                newCh._id = data.chapter.id;
-                                // 用 reorder 同步新章节的插入位置（保持和后端一致）
-                                const order = chapters.map(c => c._id).filter(Boolean);
-                                await fetch(`${API_BASE}/api/chapters/reorder`, {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ novelId: currentNovelId, order })
-                                });
-                                renderSidebar();
-                            }
+                            if (data.success && data.chapter) chapters[chapters.length - 1]._id = data.chapter.id;
                         } catch (e) { console.warn('保存章节失败:', e); }
-                        showToast(`✅ 已导入「${title}」到当前章节下方`);
+                        showToast(`✅ 已导入「${title}」`);
                     } else {
                         showToast('⚠️ 该章节已存在，跳过导入');
                     }
@@ -826,11 +764,7 @@
                 const progressPanel = document.getElementById('aiProgressPanel');
                 const progressTitle = document.getElementById('aiProgressTitle');
                 const progressLog = document.getElementById('aiProgressLog');
-                // 展开面板，隐藏恢复按钮
                 progressPanel.style.display = 'block';
-                window._aiProgressCollapsed = false;
-                const restoreBtn = document.getElementById('aiProgressRestore');
-                if (restoreBtn) restoreBtn.style.display = 'none';
                 progressLog.innerHTML = '';
                 progressTitle.textContent = '准备中...';
                 const logLine = (html) => { progressLog.innerHTML += html + '<br>'; progressLog.scrollTop = progressLog.scrollHeight; };
@@ -857,31 +791,9 @@
                     const ar = JSON.parse(localStorage.getItem('analyzer_rule') || '{}');
                     analyzeTemplate = ar.rule || '';
                 } catch (e) {}
-                // 读取角色设定库 + 人物信息库（当前小说，从后端），合并注入给 AI
+                // 读取角色设定库（当前小说的，从后端）
                 let roles = [];
                 try { roles = await fetchRoles(currentNovelId); } catch (e) {}
-                try {
-                    const cr = await fetch(`${API_BASE}/api/characters?novelId=${encodeURIComponent(currentNovelId)}`);
-                    const cd = await cr.json();
-                    if (cd.success && Array.isArray(cd.characters)) {
-                        // 人物信息库角色：用 外貌/身份/性格 作为设定描述
-                        const charRoles = cd.characters
-                            .filter(c => c && c.name)
-                            .map(c => {
-                                const parts = [];
-                                if (c.appearance) parts.push('外貌' + c.appearance);
-                                if (c.identity) parts.push('身份' + c.identity);
-                                if (c.personality) parts.push('性格' + c.personality);
-                                return { name: c.name, desc: parts.join('，') };
-                            })
-                            .filter(r => r.desc);
-                        // 合并：人物信息库优先，同名覆盖 role_cards
-                        const merged = new Map();
-                        for (const r of roles) merged.set(r.name, r);
-                        for (const r of charRoles) merged.set(r.name, r);
-                        roles = Array.from(merged.values());
-                    }
-                } catch (e) {}
                 const analyzeR = await fetch(`${API_BASE}/api/analyze-only`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate, maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '', roles }),
@@ -964,7 +876,7 @@
                             const imageUrl = genData.image?.url || genData.image;
                             const ts = Date.now() - ts0;
                             logLine(`  ✅ 场景${i+1}成功（${t(ts)}）`);
-                            results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '', offset: scene.offset, __i: i };
+                            results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '' };
                             insertedCount++;
                             lastErr = null;
                             break;
@@ -979,7 +891,7 @@
                     if (lastErr) {
                         const ts = Date.now() - ts0;
                         logLine(`  ❌ 场景${i+1}失败（${t(ts)}）: ${(lastErr.message||'').slice(0,80)}`);
-                        results[i] = { ok: false, error: lastErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '', offset: scene.offset, __i: i };
+                        results[i] = { ok: false, error: lastErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '' };
                         failedCount++;
                     }
                 }
@@ -993,49 +905,25 @@
                 }
 
                 // === 第三步：统一插入结果到章节 ===
-                // 先在原始内容上算出每个场景的插入位置，再从后往前插入，避免位置偏移
-                const insertPlans = [];
                 for (let i = 0; i < results.length; i++) {
                     const r = results[i];
                     if (!r) continue;
                     let insertPos = ch.content.length;
-                    // 优先用后端返回的 anchor 精确偏移量（最可靠）
-                    if (typeof r.offset === 'number' && r.offset >= 0 && r.offset <= ch.content.length) {
-                        insertPos = r.offset;
-                        let e = ch.content.indexOf('\n\n', insertPos + (r.anchor ? r.anchor.length : 0));
-                        if (e===-1) e = ch.content.indexOf('\n', insertPos + (r.anchor ? r.anchor.length : 0));
-                        if (e===-1) e = ch.content.length;
-                        insertPos = e;
-                    } else if (r.anchor && r.anchor.trim()) {
+                    if (r.anchor && r.anchor.trim()) {
                         const anchor = r.anchor.trim();
-                        let pos = ch.content.indexOf(anchor);
-                        if (pos === -1 && anchor.length > 6) {
-                            const frag = anchor.slice(0, 8);
-                            pos = ch.content.indexOf(frag);
-                            if (pos === -1) {
-                                const frag2 = anchor.slice(0, 6);
-                                pos = ch.content.indexOf(frag2);
-                            }
-                        }
+                        const pos = ch.content.indexOf(anchor);
                         if (pos !== -1) {
                             let e = ch.content.indexOf('\n\n', pos+anchor.length);
                             if (e===-1) e=ch.content.indexOf('\n',pos+anchor.length);
                             if(e===-1) e=ch.content.length;
                             insertPos = e;
-                        } else {
-                            logLine(`  ⚠️ 场景「${escapeHtml(r.sceneLabel)}」定位句未匹配到原文，图片将插到章节末尾`);
                         }
                     }
-                    insertPlans.push({ r, insertPos });
-                }
-                // 从后往前插入（位置大的先插，保证小位置不受影响）
-                insertPlans.sort((a, b) => b.insertPos - a.insertPos);
-                for (const { r, insertPos } of insertPlans) {
                     if (r.ok) {
                         const infoHtml = `<div class="prompt-text"><div>📝 场景：${escapeHtml(r.sceneLabel)}</div><div>📌 提示词：${escapeHtml(r.promptText)}</div></div>`;
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n![${escapeHtml(r.sceneLabel)}](${r.imageUrl})\n${infoHtml}\n---\n` + ch.content.slice(insertPos);
                     } else {
-                        const failId = 'fail-' + Date.now() + '-' + r.__i;
+                        const failId = 'fail-' + Date.now() + '-' + i;
                         const errHtml = `<div style="font-size:12px;color:#f87171;background:#2a1414;padding:6px 8px;border-radius:4px;margin-bottom:8px;">❌ ${escapeHtml(r.error)}</div>`;
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(r.promptText)}" data-label="${escapeHtml(r.sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(r.sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(r.promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
                     }
@@ -1051,11 +939,7 @@
                 logLine(`📊 共 ${scenes.length} 场景，成功 ${insertedCount}，失败 ${failedCount}，总耗时 ${t(Date.now()-t0)}`);
                 if (insertedCount > 0 && failedCount === 0) showToast(`✅ 已生成 ${insertedCount} 张配图`);
                 else if (failedCount > 0) showToast(`⚠️ 成功 ${insertedCount}，失败 ${failedCount}`);
-                setTimeout(() => {
-                    progressPanel.style.display = 'none';
-                    const restoreBtn2 = document.getElementById('aiProgressRestore');
-                    if (restoreBtn2) restoreBtn2.style.display = 'none';
-                }, 3000);
+                setTimeout(() => { progressPanel.style.display = 'none'; }, 3000);
 
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -1073,8 +957,6 @@
                 ch._aiProcessing = false;
                 setTimeout(() => {
                     document.getElementById('aiProgressPanel').style.display = 'none';
-                    const restoreBtn3 = document.getElementById('aiProgressRestore');
-                    if (restoreBtn3) restoreBtn3.style.display = 'none';
                     timerEl.remove();
                 }, 2000);
             }
@@ -1087,24 +969,6 @@
                 aiImageBtn.click();
             }
         });
-
-        // 收起/展开 AI 配图进度浮层
-        function toggleAiProgress() {
-            const panel = document.getElementById('aiProgressPanel');
-            const restoreBtn = document.getElementById('aiProgressRestore');
-            const collapsed = !window._aiProgressCollapsed;
-            window._aiProgressCollapsed = collapsed;
-            if (collapsed) {
-                // 收起：面板隐藏，显示恢复按钮
-                panel.style.display = 'none';
-                if (restoreBtn) restoreBtn.style.display = 'block';
-            } else {
-                // 展开：面板显示，隐藏恢复按钮
-                panel.style.display = 'block';
-                if (restoreBtn) restoreBtn.style.display = 'none';
-            }
-        }
-        window.toggleAiProgress = toggleAiProgress;
 
         // ============================================================
         //  8. 提示词显示/隐藏切换（场景描述 + 提示词一起切换）
@@ -1326,17 +1190,6 @@
             if (e.target === importModal) closeImportModal();
         });
 
-        // 章节列表滚到顶部/底部
-        const chListEl = document.getElementById('chapterListSidebar');
-        document.getElementById('chListTopBtn').addEventListener('click', () => {
-            chListEl.scrollTo({ top: 0, behavior: 'smooth' });
-            document.body.classList.remove('sidebar-open');
-        });
-        document.getElementById('chListBottomBtn').addEventListener('click', () => {
-            chListEl.scrollTo({ top: chListEl.scrollHeight, behavior: 'smooth' });
-            document.body.classList.remove('sidebar-open');
-        });
-
         // 移动端汉堡菜单：开合侧边栏
         document.getElementById('hamburgerBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-open');
@@ -1420,19 +1273,15 @@
             applyReaderSettings();
         };
 
-        // 字体切换（末尾一项为「导入字体」，点到即弹文件选择器）
+        // 字体切换
         const FONT_LIST = [
             { name: '默认', css: '' },
-            { name: '霞鹜文楷', css: "'LXGW WenKai', serif" },
-            { name: '思源宋体', css: "'Noto Serif SC', 'Songti SC', serif" },
-            { name: '思源黑体', css: "'Noto Sans SC', 'PingFang SC', sans-serif" },
-            { name: '圆体', css: "'Noto Sans SC', 'Yuanti SC', sans-serif" },
             { name: '衬线', css: "'Noto Serif CJK SC', 'Songti SC', serif" },
             { name: '无衬线', css: "'Noto Sans CJK SC', 'PingFang SC', sans-serif" },
+            { name: '圆体', css: "'Noto Sans CJK SC', 'Yuanti SC', sans-serif" },
             { name: '宋体(PC)', css: 'SimSun, serif' },
             { name: '雅黑(PC)', css: "'Microsoft YaHei', sans-serif" },
             { name: '楷体(PC)', css: 'KaiTi, serif' },
-            { name: '📥 导入字体', css: '__IMPORT__' },
         ];
         let fontIdx = 0;
         try { fontIdx = FONT_LIST.findIndex(f => f.css === (readerSettings.fontFamily || '')); } catch (e) {}
@@ -1440,8 +1289,6 @@
         document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
         window.cycleFont = () => {
             fontIdx = (fontIdx + 1) % FONT_LIST.length;
-            // 点到「导入字体」项：弹出文件选择器，不改变当前字体
-            if (FONT_LIST[fontIdx].css === '__IMPORT__') { fontFile.click(); return; }
             readerSettings.fontFamily = FONT_LIST[fontIdx].css;
             document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
             applyReaderSettings();
@@ -1487,8 +1334,13 @@
             };
             reader.readAsDataURL(f);
         };
-        // 导入自定义字体：已在字体列表末尾加了「📥 导入字体」项，点击即触发
-        // （移除原来的 mousedown 长按逻辑，它在移动端会拦截普通点击导致字体切换失效）
+        // 长按字体按钮导入自定义字体
+        let fontBtnTimer = null;
+        document.getElementById('fontFamilyBtn').addEventListener('mousedown', () => {
+            fontBtnTimer = setTimeout(() => { fontFile.click(); }, 600);
+        });
+        document.getElementById('fontFamilyBtn').addEventListener('mouseup', () => { clearTimeout(fontBtnTimer); });
+        document.getElementById('fontFamilyBtn').addEventListener('mouseleave', () => { clearTimeout(fontBtnTimer); });
 
         // 背景图设置
         function applyBg() {
@@ -1785,139 +1637,6 @@
             await fetch(`${API_BASE}/api/novels/${currentNovelId}`, { method: 'DELETE' });
             await loadNovels();
             if (novels[0]) await switchNovel(novels[0].id);
-        });
-
-        // ===== 人物信息库（AI 解析章节，增量更新主角/NPC 表）=====
-        const charModal = document.getElementById('charModal');
-        const charModalBody = document.getElementById('charModalBody');
-        let charList = [];
-        document.getElementById('charactersBtn').addEventListener('click', async () => {
-            const cur = novels.find(n => n.id === currentNovelId);
-            if (!cur) { showToast('⚠️ 请先选择一本小说', 'warn'); return; }
-            document.getElementById('charModalTitle').textContent = `🧑 人物信息库（《${cur.name}》）`;
-            charModal.classList.add('open');
-            await loadCharacters();
-        });
-        document.getElementById('closeCharModalBtn').addEventListener('click', () => charModal.classList.remove('open'));
-        charModal.addEventListener('click', (e) => { if (e.target === charModal) charModal.classList.remove('open'); });
-
-        async function loadCharacters() {
-            try {
-                const r = await fetch(`${API_BASE}/api/characters?novelId=${encodeURIComponent(currentNovelId)}`);
-                const d = await r.json();
-                charList = d.success ? (d.characters || []) : [];
-                renderCharacters();
-            } catch (e) { charModalBody.innerHTML = `<div style="color:#f87171;padding:20px;">加载失败: ${e.message}</div>`; }
-        }
-        function renderCharacters() {
-            const protagonists = charList.filter(c => c.role === '主角');
-            const npcs = charList.filter(c => c.role !== '主角');
-            const statEl = document.getElementById('charAnalyzeStatus');
-            if (statEl) statEl.textContent = `共 ${charList.length} 人（主角 ${protagonists.length}，NPC ${npcs.length}）`;
-            const card = (c) => `
-                <div style="background:#0e0e1e;border:1px solid #2a2a4a;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <b style="color:#e9d5ff;">${escapeHtml(c.name)}</b>
-                        <span style="font-size:11px;padding:1px 8px;border-radius:10px;background:${c.role==='主角'?'#7c3aed':'#2a2a4a'};color:${c.role==='主角'?'#fff':'#aaa'};">${escapeHtml(c.role||'NPC')}</span>
-                        <span style="font-size:11px;color:#666;margin-left:auto;">出现 ${c.appearances||1} 次</span>
-                        <button onclick="editChar('${c.id}')" style="font-size:11px;padding:2px 8px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 编辑</button>
-                        <button onclick="delChar('${c.id}')" style="font-size:11px;padding:2px 8px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
-                    </div>
-                    ${c.identity?`<div style="font-size:12px;color:#7dd3fc;margin-top:4px;">🏷️ ${escapeHtml(c.identity)}</div>`:''}
-                    ${c.appearance?`<div style="font-size:12px;color:#c0c0d0;margin-top:3px;">👤 外貌：${escapeHtml(c.appearance)}</div>`:''}
-                    ${c.personality?`<div style="font-size:12px;color:#c0c0d0;margin-top:3px;">💭 性格：${escapeHtml(c.personality)}</div>`:''}
-                    ${c.relation?`<div style="font-size:12px;color:#c0c0d0;margin-top:3px;">🔗 关系：${escapeHtml(c.relation)}</div>`:''}
-                    ${c.firstChapter?`<div style="font-size:11px;color:#666;margin-top:3px;">📖 首见：${escapeHtml(c.firstChapter)}</div>`:''}
-                </div>`;
-            charModalBody.innerHTML = `
-                <div style="margin-bottom:10px;"><button onclick="addCharManual()" style="padding:6px 14px;background:#38bdf8;color:#06283d;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;">➕ 手动添加人物</button></div>
-                ${charList.length === 0 ? '<div style="color:#666;text-align:center;padding:30px;">暂无人物，点击上方「解析当前章节人物」或「手动添加人物」</div>' : ''}
-                ${protagonists.length ? `<h4 style="color:#7c3aed;margin:6px 0;">⭐ 主角信息表（${protagonists.length}）</h4>${protagonists.map(card).join('')}` : ''}
-                ${npcs.length ? `<h4 style="color:#38bdf8;margin:10px 0 6px;">👥 NPC 信息表（${npcs.length}）</h4>${npcs.map(card).join('')}` : ''}
-            `;
-        }
-        async function saveCharList() {
-            try {
-                await fetch(`${API_BASE}/api/characters/save`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ novelId: currentNovelId, characters: charList })
-                });
-            } catch (e) { showToast('❌ 保存失败: ' + e.message, 'error'); }
-        }
-        async function editChar(id) {
-            const c = charList.find(x => x.id === id);
-            if (!c) return;
-            const name = prompt('人物姓名：', c.name); if (name === null) return;
-            const role = prompt('类型（主角/NPC）：', c.role || 'NPC'); if (role === null) return;
-            const identity = prompt('身份/职业：', c.identity || ''); if (identity === null) return;
-            const appearance = prompt('外貌描写：', c.appearance || ''); if (appearance === null) return;
-            const personality = prompt('性格特征：', c.personality || ''); if (personality === null) return;
-            const relation = prompt('与主角/故事的关系：', c.relation || ''); if (relation === null) return;
-            c.name = name.trim(); c.role = role.trim() === '主角' ? '主角' : 'NPC';
-            c.identity = identity.trim(); c.appearance = appearance.trim();
-            c.personality = personality.trim(); c.relation = relation.trim();
-            await saveCharList();
-            renderCharacters();
-            showToast('✅ 已保存修改', 'success');
-        }
-        async function delChar(id) {
-            if (!confirm('确定删除该人物？')) return;
-            charList = charList.filter(x => x.id !== id);
-            await saveCharList();
-            renderCharacters();
-            showToast('🗑️ 已删除', 'success');
-        }
-        async function addCharManual() {
-            const name = prompt('新人物姓名：'); if (!name || !name.trim()) return;
-            const role = prompt('类型（主角/NPC）：', 'NPC');
-            const identity = prompt('身份/职业：', '') || '';
-            const appearance = prompt('外貌描写：', '') || '';
-            const personality = prompt('性格特征：', '') || '';
-            const relation = prompt('与主角/故事的关系：', '') || '';
-            charList.push({
-                id: uid2(),
-                name: name.trim(), role: (role||'NPC').trim() === '主角' ? '主角' : 'NPC',
-                identity, appearance, personality, relation,
-                firstChapter: '', lastChapter: '', appearances: 1
-            });
-            await saveCharList();
-            renderCharacters();
-            showToast('✅ 已添加人物', 'success');
-        }
-        function uid2(){ return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-        // 暴露到全局，供 onclick 使用
-        window.editChar = editChar; window.delChar = delChar; window.addCharManual = addCharManual;
-        function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-        // 解析当前章节人物
-        document.getElementById('charAnalyzeBtn').addEventListener('click', async () => {
-            if (currentIndex < 0 || !chapters[currentIndex]) { showToast('⚠️ 请先打开一章', 'warn'); return; }
-            const ch = chapters[currentIndex];
-            const llmCfg = (loadApiConfig() || {}).llm || {};
-            if (!llmCfg.apiKey) { showToast('⚠️ 请先配置 LLM API Key', 'warn'); return; }
-            const statusEl = document.getElementById('charAnalyzeStatus');
-            const btn = document.getElementById('charAnalyzeBtn');
-            btn.disabled = true; btn.textContent = '⏳ 解析中...';
-            statusEl.textContent = 'AI 正在识别本章人物...';
-            try {
-                const r = await fetch(`${API_BASE}/api/characters/analyze`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        novelId: currentNovelId, content: ch.content, title: ch.title,
-                        model: llmCfg.model, llmApiUrl: llmCfg.apiUrl, llmApiKey: llmCfg.apiKey
-                    })
-                });
-                const d = await r.json();
-                if (!d.success) throw new Error(d.error || '解析失败');
-                statusEl.textContent = `✅ 新增 ${d.added.length} 人，更新 ${d.updated.length} 人`;
-                await loadCharacters();
-                if (d.added.length) showToast(`✨ 新增人物：${d.added.join(', ')}`, 'success');
-            } catch (e) {
-                statusEl.textContent = '❌ ' + e.message;
-                showToast('❌ 解析失败: ' + e.message, 'error');
-            } finally {
-                btn.disabled = false; btn.textContent = '✨ 解析当前章节人物';
-            }
         });
 
         // 保存当前章节到后端（AI 配图改了内容后调用）
