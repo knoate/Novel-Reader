@@ -978,12 +978,25 @@
                     let insertPos = ch.content.length;
                     if (r.anchor && r.anchor.trim()) {
                         const anchor = r.anchor.trim();
-                        const pos = ch.content.indexOf(anchor);
+                        // 1) 精确匹配 anchor 定位句
+                        let pos = ch.content.indexOf(anchor);
+                        // 2) 模糊回退：anchor 可能被 AI 轻微改写，取前段关键词再找
+                        if (pos === -1 && anchor.length > 6) {
+                            const frag = anchor.slice(0, 8);
+                            pos = ch.content.indexOf(frag);
+                            if (pos === -1) {
+                                // 用 anchor 里第一个 6 字词再试
+                                const frag2 = anchor.slice(0, 6);
+                                pos = ch.content.indexOf(frag2);
+                            }
+                        }
                         if (pos !== -1) {
                             let e = ch.content.indexOf('\n\n', pos+anchor.length);
                             if (e===-1) e=ch.content.indexOf('\n',pos+anchor.length);
                             if(e===-1) e=ch.content.length;
                             insertPos = e;
+                        } else {
+                            logLine(`  ⚠️ 场景「${escapeHtml(r.sceneLabel)}」定位句未匹配到原文，图片将插到章节末尾`);
                         }
                     }
                     if (r.ok) {
@@ -1364,7 +1377,7 @@
             applyReaderSettings();
         };
 
-        // 字体切换
+        // 字体切换（末尾一项为「导入字体」，点到即弹文件选择器）
         const FONT_LIST = [
             { name: '默认', css: '' },
             { name: '霞鹜文楷', css: "'LXGW WenKai', serif" },
@@ -1376,6 +1389,7 @@
             { name: '宋体(PC)', css: 'SimSun, serif' },
             { name: '雅黑(PC)', css: "'Microsoft YaHei', sans-serif" },
             { name: '楷体(PC)', css: 'KaiTi, serif' },
+            { name: '📥 导入字体', css: '__IMPORT__' },
         ];
         let fontIdx = 0;
         try { fontIdx = FONT_LIST.findIndex(f => f.css === (readerSettings.fontFamily || '')); } catch (e) {}
@@ -1383,6 +1397,8 @@
         document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
         window.cycleFont = () => {
             fontIdx = (fontIdx + 1) % FONT_LIST.length;
+            // 点到「导入字体」项：弹出文件选择器，不改变当前字体
+            if (FONT_LIST[fontIdx].css === '__IMPORT__') { fontFile.click(); return; }
             readerSettings.fontFamily = FONT_LIST[fontIdx].css;
             document.getElementById('fontFamilyBtn').textContent = '🔤 ' + FONT_LIST[fontIdx].name;
             applyReaderSettings();
@@ -1428,13 +1444,8 @@
             };
             reader.readAsDataURL(f);
         };
-        // 长按字体按钮导入自定义字体
-        let fontBtnTimer = null;
-        document.getElementById('fontFamilyBtn').addEventListener('mousedown', () => {
-            fontBtnTimer = setTimeout(() => { fontFile.click(); }, 600);
-        });
-        document.getElementById('fontFamilyBtn').addEventListener('mouseup', () => { clearTimeout(fontBtnTimer); });
-        document.getElementById('fontFamilyBtn').addEventListener('mouseleave', () => { clearTimeout(fontBtnTimer); });
+        // 导入自定义字体：已在字体列表末尾加了「📥 导入字体」项，点击即触发
+        // （移除原来的 mousedown 长按逻辑，它在移动端会拦截普通点击导致字体切换失效）
 
         // 背景图设置
         function applyBg() {
