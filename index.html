@@ -76,19 +76,17 @@
                 <h2>📚 章节列表</h2>
                 <span class="badge" id="chapterCount">0 章</span>
             </div>
-            <div id="novelSelector" style="padding:8px 12px;border-bottom:1px solid #2a2a4a;">
-                <select id="novelSelect" style="width:100%;padding:6px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
-                <div style="display:flex;gap:6px;margin-top:6px;">
-                    <button id="newNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">➕ 新建</button>
-                    <button id="renameNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
-                    <button id="delNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
+            <div id="novelSelector" style="padding:6px 10px;border-bottom:1px solid #2a2a4a;">
+                <select id="novelSelect" style="width:100%;padding:5px;background:#1a1a2e;color:#e0e0e0;border:1px solid #3a3a5e;border-radius:6px;font-size:13px;"></select>
+                <div style="display:flex;gap:5px;margin-top:5px;">
+                    <button id="newNovelBtn" title="新建小说" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">➕ 新建</button>
+                    <button id="renameNovelBtn" title="重命名" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
+                    <button id="delNovelBtn" title="删除小说" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
                 </div>
-                <div style="margin-top:6px;">
-                    <button id="roleCardsBtn" style="width:100%;font-size:12px;padding:5px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色设定（当前小说）</button>
-                </div>
-                <div style="display:flex;gap:6px;margin-top:6px;">
-                    <button id="exportNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
-                    <button id="importNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
+                <div style="display:flex;gap:5px;margin-top:5px;">
+                    <button id="roleCardsBtn" title="角色设定（当前小说）" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色</button>
+                    <button id="exportNovelBtn" title="导出小说" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
+                    <button id="importNovelBtn" title="导入小说" style="flex:1;font-size:11px;padding:4px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
                     <input type="file" id="importNovelFile" accept=".json,application/json" style="display:none;">
                 </div>
             </div>

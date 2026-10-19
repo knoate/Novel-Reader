@@ -526,12 +526,31 @@ body {
     .chapter-item-sidebar .num { min-width: 28px; font-size: 11px; }
 
     #novelSelect {
-        font-size: 15px !important;
-        padding: 8px !important;
+        font-size: 14px !important;
+        padding: 5px !important;
+    }
+    #novelSelector {
+        padding: 6px 8px !important;
     }
     #novelSelector button {
-        padding: 8px 4px !important;
-        font-size: 13px !important;
+        padding: 5px 2px !important;
+        font-size: 11px !important;
+    }
+    #novelSelector > div {
+        margin-top: 5px !important;
+    }
+    /* 侧边栏头部和底部更紧凑，给章节列表更多空间 */
+    .sidebar-header {
+        padding: 10px 14px !important;
+    }
+    .sidebar-footer {
+        padding: 8px 10px !important;
+        gap: 5px !important;
+    }
+    .sidebar-footer button {
+        padding: 5px 4px !important;
+        font-size: 11px !important;
+        min-width: 44px !important;
     }
 
     .content-area {
