@@ -94,6 +94,8 @@
                 <button class="primary-btn" id="importBtn">📥 导入小说</button>
                 <button id="expandAllBtn">展开全部</button>
                 <button id="collapseAllBtn">收起全部</button>
+                <button id="chListTopBtn" title="章节列表滚到顶部" style="min-width:44px;">⏫ 顶部</button>
+                <button id="chListBottomBtn" title="章节列表滚到底部" style="min-width:44px;">⏬ 底部</button>
             </div>
         </aside>
 
@@ -152,10 +154,15 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
     <!-- AI 进度浮层 -->
-    <div id="aiProgressPanel" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#1a1410;border:1px solid #ffd866;border-radius:10px;padding:14px 16px;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:13px;">
-        <div style="color:#ffd866;font-weight:bold;margin-bottom:8px;">⏳ <span id="aiProgressTitle">处理中...</span></div>
-        <div id="aiProgressLog" style="color:#aaa;line-height:1.9;max-height:200px;overflow-y:auto;font-size:12px;"></div>
+    <div id="aiProgressPanel" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#1a1410;border:1px solid #ffd866;border-radius:10px;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:13px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 4px;cursor:pointer;" onclick="toggleAiProgress()" title="点击收起/展开">
+            <span style="color:#ffd866;font-weight:bold;flex:1;">⏳ <span id="aiProgressTitle">处理中...</span></span>
+            <span id="aiCollapseBtn" style="font-size:14px;color:#888;cursor:pointer;user-select:none;">—</span>
+        </div>
+        <div id="aiProgressLog" style="color:#aaa;line-height:1.9;max-height:200px;overflow-y:auto;font-size:12px;padding:0 14px 14px;"></div>
     </div>
+    <!-- AI 进度收起后的恢复按钮 -->
+    <button id="aiProgressRestore" onclick="toggleAiProgress()" style="display:none;position:fixed;right:16px;bottom:16px;z-index:2000;background:#7c3aed;color:#fff;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,0.5);" title="展开配图进度">🎨</button>
 
     <!-- ====== 导入模态框 ====== -->
     <div class="modal-overlay" id="importModal">
@@ -514,9 +521,21 @@
                     const { title, content, wordCount } = event.data.payload;
                     const exists = chapters.some(ch => ch.content === content);
                     if (!exists) {
-                        chapters.push({ title, content, wordCount: wordCount || content.length });
-                        currentIndex = chapters.length - 1;
+                        // 插入到当前选中章节下面（currentIndex 之后）；未打开章节则追加到末尾
+                        let newCh, insertAt;
+                        if (currentIndex >= 0 && chapters[currentIndex]) {
+                            insertAt = currentIndex + 1;
+                            newCh = { title, content, wordCount: wordCount || content.length };
+                            chapters.splice(insertAt, 0, newCh);
+                            currentIndex = insertAt;
+                        } else {
+                            newCh = { title, content, wordCount: wordCount || content.length };
+                            chapters.push(newCh);
+                            insertAt = chapters.length - 1;
+                            currentIndex = insertAt;
+                        }
                         renderContent();
+                        renderSidebar();
                         // 保存到后端
                         try {
                             const r = await fetch(`${API_BASE}/api/chapters`, {
@@ -524,9 +543,17 @@
                                 body: JSON.stringify({ title, content, novelId: currentNovelId })
                             });
                             const data = await r.json();
-                            if (data.success && data.chapter) chapters[chapters.length - 1]._id = data.chapter.id;
+                            if (data.success && data.chapter) {
+                                chapters[insertAt]._id = data.chapter.id;
+                                // 同步插入位置到后端（保持顺序一致）
+                                const order = chapters.map(c => c._id).filter(Boolean);
+                                await fetch(`${API_BASE}/api/chapters/reorder`, {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ novelId: currentNovelId, order })
+                                });
+                            }
                         } catch (e) { console.warn('保存章节失败:', e); }
-                        showToast(`✅ 已导入「${title}」`);
+                        showToast(`✅ 已导入「${title}」到当前章节下方`);
                     } else {
                         showToast('⚠️ 该章节已存在，跳过导入');
                     }
@@ -757,6 +784,9 @@
                 const progressTitle = document.getElementById('aiProgressTitle');
                 const progressLog = document.getElementById('aiProgressLog');
                 progressPanel.style.display = 'block';
+                window._aiProgressCollapsed = false;
+                const restoreBtn0 = document.getElementById('aiProgressRestore');
+                if (restoreBtn0) restoreBtn0.style.display = 'none';
                 progressLog.innerHTML = '';
                 progressTitle.textContent = '准备中...';
                 const logLine = (html) => { progressLog.innerHTML += html + '<br>'; progressLog.scrollTop = progressLog.scrollHeight; };
@@ -899,13 +929,13 @@
                         ch.content = ch.content.slice(0, insertPos) + `\n\n---\n<div class="gen-fail" id="${failId}" data-prompt="${escapeHtml(r.promptText)}" data-label="${escapeHtml(r.sceneLabel)}" style="margin:12px 0;padding:12px 14px;background:#1a1414;border:1px dashed #f87171;border-radius:8px;">\n<div style="color:#f87171;font-weight:600;margin-bottom:6px;">⚠️ 场景：${escapeHtml(r.sceneLabel)}（图片生成失败）</div>\n${errHtml}<div style="font-size:12px;color:#999;margin-bottom:10px;line-height:1.6;">📌 ${escapeHtml(r.promptText)}</div>\n<button onclick="retryGenImage(this)" style="padding:6px 16px;background:#f87171;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;">🔄 重新生成这张图</button>\n</div>\n---\n` + ch.content.slice(insertPos);
                     }
                 }
-                await saveCurrentChapter();
+                await saveChapterObj(ch);
 
                 ch._aiProcessed = true;
                 ch.wordCount = ch.content.length;
                 const stillOnThisChapter = (currentIndex === originalChapterIndex);
                 if (stillOnThisChapter) renderContent();
-                await saveCurrentChapter();
+                await saveChapterObj(ch);
                 progressTitle.textContent = '✅ 完成';
                 logLine(`📊 共 ${scenes.length} 场景，成功 ${insertedCount}，失败 ${failedCount}，总耗时 ${t(Date.now()-t0)}`);
                 if (insertedCount > 0 && failedCount === 0) showToast(`✅ 已生成 ${insertedCount} 张配图`);
@@ -928,6 +958,8 @@
                 ch._aiProcessing = false;
                 setTimeout(() => {
                     document.getElementById('aiProgressPanel').style.display = 'none';
+                    const restoreBtn2 = document.getElementById('aiProgressRestore');
+                    if (restoreBtn2) restoreBtn2.style.display = 'none';
                     timerEl.remove();
                 }, 2000);
             }
@@ -940,6 +972,22 @@
                 aiImageBtn.click();
             }
         });
+
+        // 收起/展开 AI 配图进度浮层
+        function toggleAiProgress() {
+            const panel = document.getElementById('aiProgressPanel');
+            const restoreBtn = document.getElementById('aiProgressRestore');
+            const collapsed = !window._aiProgressCollapsed;
+            window._aiProgressCollapsed = collapsed;
+            if (collapsed) {
+                panel.style.display = 'none';
+                if (restoreBtn) restoreBtn.style.display = 'block';
+            } else {
+                panel.style.display = 'block';
+                if (restoreBtn) restoreBtn.style.display = 'none';
+            }
+        }
+        window.toggleAiProgress = toggleAiProgress;
 
         // ============================================================
         //  8. 提示词显示/隐藏切换（场景描述 + 提示词一起切换）
@@ -1161,6 +1209,17 @@
             if (e.target === importModal) closeImportModal();
         });
 
+        // 章节列表滚到顶部/底部（选择章节的列表区，非正文区）
+        const chListScrollEl = document.getElementById('chapterListSidebar');
+        document.getElementById('chListTopBtn').addEventListener('click', () => {
+            chListScrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+            document.body.classList.remove('sidebar-open');
+        });
+        document.getElementById('chListBottomBtn').addEventListener('click', () => {
+            chListScrollEl.scrollTo({ top: chListScrollEl.scrollHeight, behavior: 'smooth' });
+            document.body.classList.remove('sidebar-open');
+        });
+
         // 移动端汉堡菜单：开合侧边栏
         document.getElementById('hamburgerBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-open');
@@ -1318,11 +1377,14 @@
             const bg = readerSettings.bgImage || '';
             const content = document.querySelector('.main-content');
             if (bg && content) {
-                content.style.backgroundImage = `url(${bg})`;
+                // 渐变遮罩压在图上层，让文字更清晰
+                let op = parseFloat(readerSettings.bgOpacity);
+                if (isNaN(op) || op < 0 || op > 0.98) op = 0.88;
+                const dark = 'rgba(12,12,24,';
+                content.style.backgroundImage = `linear-gradient(${dark}${op}), ${dark}${op}), url(${bg})`;
                 content.style.backgroundSize = 'cover';
                 content.style.backgroundPosition = 'center';
                 content.style.backgroundAttachment = 'fixed';
-                content.style.backgroundColor = 'rgba(15,15,26,0.82)';
                 content.style.backgroundBlendMode = 'normal';
                 content.style.cursor = 'default';
             } else if (content) {
@@ -1334,9 +1396,15 @@
         }
         document.getElementById('bgBtn').onclick = () => {
             const cur = readerSettings.bgImage;
-            const choice = prompt(cur ? '输入背景图URL，或留空清除；确定上传本地图片请输入"file"' : '输入背景图URL，或输入"file"上传本地图片');
+            const choice = prompt(cur ? '背景图：输入新URL 或"file"换本地图；留空清除；输入"透明 0.x"调节遮罩深浅' : '输入背景图URL，或输入"file"上传本地图片');
             if (choice === null) return;
             if (choice === 'file') { document.getElementById('bgFile').click(); return; }
+            if (choice.trim().startsWith('透明')) {
+                const v = parseFloat(choice.replace(/透明/g, '').trim());
+                if (!isNaN(v) && v >= 0 && v <= 1) { readerSettings.bgOpacity = v; applyReaderSettings(); applyBg(); showToast(`🖼️ 遮罩透明度已设为 ${v}`); }
+                else showToast('⚠️ 格式应为「透明 0.8」');
+                return;
+            }
             if (choice === '') { readerSettings.bgImage = ''; }
             else { readerSettings.bgImage = choice.trim(); }
             applyReaderSettings(); applyBg();
@@ -1503,7 +1571,12 @@
         // 保存当前章节到后端（AI 配图改了内容后调用）
         async function saveCurrentChapter() {
             if (currentIndex < 0 || !chapters[currentIndex]) return;
-            const ch = chapters[currentIndex];
+            await saveChapterObj(chapters[currentIndex]);
+        }
+
+        // 显式按章节对象保存（不依赖 currentIndex，供后台配图切章后仍能保存正确章节）
+        async function saveChapterObj(ch) {
+            if (!ch || !ch.content) return;
             try {
                 const r = await fetch(`${API_BASE}/api/chapters`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
