@@ -48,6 +48,7 @@ const NOVELS_FILE = path.join(DATA_DIR, 'novels.json');
 const CHAPTERS_FILE = path.join(DATA_DIR, 'chapters.json');
 const ILLUS_FILE = path.join(DATA_DIR, 'illustrations.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
+const ROLES_FILE = path.join(DATA_DIR, 'roles.json');
 
 function loadJson(file, fallback) {
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -89,6 +90,7 @@ let novels = loadJson(NOVELS_FILE, []);
 let chapters = loadJson(CHAPTERS_FILE, []);
 let illustrations = loadJson(ILLUS_FILE, []);
 let statsLog = loadJson(STATS_FILE, []);
+let roles = loadJson(ROLES_FILE, {}); // { novelId: [{ name, desc }] }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 function logStat(engine, success) {
@@ -186,8 +188,18 @@ async function analyzeChapters(title, content, model, instruction = '', maxScene
             { scene: '神秘的森林小径', prompt: 'A mysterious forest path with glowing mushrooms, ancient trees, ethereal atmosphere, fantasy art, detailed, beautiful lighting', anchor: '森林小径蜿蜒向前，不知通往何处' }
         ];
     }
+    // 角色设定库：如果传了角色，拼成英文参考卡供 AI 在写 prompt 时使用
+    let roleExtra = '';
+    if (opts.roles && opts.roles.length) {
+        const lines = opts.roles
+            .filter(r => r && r.name && r.desc)
+            .map(r => `- ${r.name}: ${r.desc}`);
+        if (lines.length) {
+            roleExtra = `\n\n【角色设定卡（当场景涉及这些角色时，prompt 必须严格按其外貌/服装/气质描述，不得随意改动外形）】\n${lines.join('\n')}`;
+        }
+    }
     // 用户自定义的「绘图提示词生成规则」追加到系统指令
-    const sysExtra = instruction ? `\n\n【附加规则：你生成的 prompt 字段必须遵守】\n${instruction}` : '';
+    const sysExtra = (instruction ? `\n\n【附加规则：你生成的 prompt 字段必须遵守】\n${instruction}` : '') + roleExtra;
     const chunks = chunkText(content || '');
     const allScenes = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -410,12 +422,15 @@ async function generateGrokImage(opts = {}) {
 
     let resp;
     try {
-        resp = await axios.post(url, {
+        const body = {
             model: model || process.env.GROK_MODEL || 'grok-2-image-1212',
             prompt,
             n: 1,
             response_format: 'b64_json'
-        }, {
+        };
+        // 长宽比：转成 OpenAI 兼容 size（如 1024x1024 / 832x1216）
+        if (width && height) body.size = `${width}x${height}`;
+        resp = await axios.post(url, body, {
             headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             timeout: 120000
         });
@@ -495,10 +510,117 @@ app.delete('/api/novels/:id', (req, res) => {
     illus.forEach(i => deleteLocalImage(i.image));
     illustrations = illustrations.filter(i => i.novelId !== nid);
     novels = novels.filter(n => n.id !== nid);
+    delete roles[nid];
     saveJson(CHAPTERS_FILE, chapters);
     saveJson(ILLUS_FILE, illustrations);
     saveJson(NOVELS_FILE, novels);
+    saveJson(ROLES_FILE, roles);
     res.json({ success: true });
+});
+
+// ---- 角色设定库（按小说）----
+app.get('/api/roles', (req, res) => {
+    const nid = req.query.novelId;
+    const list = nid ? (roles[nid] || []) : [];
+    res.json({ success: true, roles: list });
+});
+app.post('/api/roles', (req, res) => {
+    const { novelId, roles: newRoles } = req.body;
+    if (!novelId) return res.status(400).json({ error: '缺少 novelId' });
+    roles[novelId] = Array.isArray(newRoles) ? newRoles.filter(r => r && r.name && r.desc) : [];
+    saveJson(ROLES_FILE, roles);
+    res.json({ success: true, roles: roles[novelId] });
+});
+
+// ---- 小说导出（配图完整迁移到另一台设备）----
+app.get('/api/novels/:id/export', (req, res) => {
+    try {
+        const nid = req.params.id;
+        const novel = novels.find(n => n.id === nid);
+        if (!novel) return res.status(404).json({ error: '小说不存在' });
+        const novelChapters = chapters.filter(c => c.novelId === nid);
+        const novelIllus = illustrations.filter(i => i.novelId === nid);
+        // 收集所有本地图片（章节内 + 插图库）转 base64
+        const images = {}; // { '/images/xxx': 'data:image/...;base64,...' }
+        const addImage = (url) => {
+            if (!url || typeof url !== 'string') return;
+            // 章节内容里的 markdown 引用
+            if (url.startsWith('/images/')) {
+                const clean = url.split('?')[0];
+                const fp = path.join(__dirname, decodeURIComponent(clean));
+                if (fs.existsSync(fp)) {
+                    const mime = clean.endsWith('.png') ? 'image/png' : clean.endsWith('.jpg') || clean.endsWith('.jpeg') ? 'image/jpeg' : clean.endsWith('.webp') ? 'image/webp' : 'image/png';
+                    images[clean] = `data:${mime};base64,${fs.readFileSync(fp).toString('base64')}`;
+                }
+            }
+        };
+        novelChapters.forEach(c => extractLocalImages(c.content || '').forEach(addImage));
+        novelIllus.forEach(i => addImage(i.image));
+        const payload = {
+            type: 'novel-reader-export',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            novel,
+            chapters: novelChapters,
+            illustrations: novelIllus,
+            roles: roles[nid] || [],
+            images
+        };
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="novel_${encodeURIComponent(novel.name)}_export.json"`);
+        res.json(payload);
+    } catch (e) {
+        console.error('导出失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 小说导入（从导出文件恢复）----
+app.post('/api/novels/import', async (req, res) => {
+    try {
+        const p = req.body;
+        if (!p || p.type !== 'novel-reader-export') return res.status(400).json({ error: '不是有效的导出文件' });
+        // 恢复图片：base64 → 文件（保持 /images/... 路径）
+        if (p.images && typeof p.images === 'object') {
+            for (const [url, dataUri] of Object.entries(p.images)) {
+                if (!dataUri || typeof dataUri !== 'string') continue;
+                const comma = dataUri.indexOf(',');
+                if (comma === -1) continue;
+                const buf = Buffer.from(dataUri.slice(comma + 1), 'base64');
+                const clean = url.split('?')[0];
+                const fp = path.join(__dirname, decodeURIComponent(clean));
+                // 只允许写回 images 目录，防路径穿越
+                if (!fp.startsWith(path.join(__dirname, 'images'))) continue;
+                fs.mkdirSync(path.dirname(fp), { recursive: true });
+                fs.writeFileSync(fp, buf);
+            }
+        }
+        // 写入小说
+        const novel = { ...p.novel };
+        // 若已存在同名小说则追加时间戳避免冲突
+        if (novels.some(n => n.id === novel.id)) {
+            novel.id = 'n' + Date.now();
+        }
+        novels.unshift(novel);
+        // 写入章节（把旧 id 对应的 novelId 改为新 id）
+        const newId = novel.id;
+        const newChapters = (p.chapters || []).map(c => ({ ...c, novelId: newId }));
+        newChapters.forEach(c => { if (!c._id) c._id = uid(); });
+        const newIllus = (p.illustrations || []).map(i => ({ ...i, novelId: newId }));
+        newIllus.forEach(i => { if (!i.id) i.id = uid(); });
+        chapters.push(...newChapters);
+        illustrations.push(...newIllus);
+        roles[newId] = (p.roles || []).filter(r => r && r.name && r.desc);
+        saveJson(NOVELS_FILE, novels);
+        saveJson(CHAPTERS_FILE, chapters);
+        saveJson(ILLUS_FILE, illustrations);
+        saveJson(ROLES_FILE, roles);
+        console.log(`📥 已导入小说《${novel.name}》（${newChapters.length}章）`);
+        res.json({ success: true, novel, importedChapters: newChapters.length, importedImages: Object.keys(p.images || {}).length });
+    } catch (e) {
+        console.error('导入失败:', e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/chapters', (req, res) => {
@@ -680,7 +802,8 @@ app.post('/api/analyze-only', async (req, res) => {
         if (!content) return res.status(400).json({ error: '缺少章节内容' });
         const opts = {
             apiUrl: req.body.llmApiUrl || '',
-            apiKey: req.body.llmApiKey || ''
+            apiKey: req.body.llmApiKey || '',
+            roles: req.body.roles || []
         };
         const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', parseInt(maxScenes) || 5, ctrl.signal, opts);
         res.json({ success: true, scenes });
@@ -849,7 +972,7 @@ app.post('/api/analyze-and-generate', async (req, res) => {
         const { title, content, model, engine = 'comfyui', workflowConfig, chapterId, promptTemplate, negativeTemplate, analyzeTemplate } = req.body;
         if (!content) return res.status(400).json({ error: '缺少章节内容' });
 
-        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '');
+        const scenes = await analyzeChapters(title, content, model, analyzeTemplate || '', 5, undefined, { roles: req.body.roles || [] });
         if (!scenes.length) return res.json({ success: true, scenes: [], message: '未找到适合配图的场景' });
 
         const results = [];

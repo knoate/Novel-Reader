@@ -83,6 +83,14 @@
                     <button id="renameNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#ffd866;border:1px solid #ffd866;border-radius:5px;cursor:pointer;">✏️ 重命名</button>
                     <button id="delNovelBtn" style="flex:1;font-size:12px;padding:4px;background:#2a2a4a;color:#f87171;border:1px solid #f87171;border-radius:5px;cursor:pointer;">🗑️ 删除</button>
                 </div>
+                <div style="margin-top:6px;">
+                    <button id="roleCardsBtn" style="width:100%;font-size:12px;padding:5px;background:#2a2a4a;color:#e9d5ff;border:1px solid #a78bfa;border-radius:5px;cursor:pointer;">👤 角色设定（当前小说）</button>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="exportNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#4ade80;border:1px solid #4ade80;border-radius:5px;cursor:pointer;">📤 导出</button>
+                    <button id="importNovelBtn" style="flex:1;font-size:12px;padding:5px;background:#2a2a4a;color:#60a5fa;border:1px solid #60a5fa;border-radius:5px;cursor:pointer;">📥 导入</button>
+                    <input type="file" id="importNovelFile" accept=".json,application/json" style="display:none;">
+                </div>
             </div>
             <div class="chapter-list-sidebar" id="chapterListSidebar">
                 <div class="empty-state" style="padding:40px 20px;font-size:14px;">
@@ -813,9 +821,12 @@
                     const ar = JSON.parse(localStorage.getItem('analyzer_rule') || '{}');
                     analyzeTemplate = ar.rule || '';
                 } catch (e) {}
+                // 读取角色设定库（当前小说的，从后端）
+                let roles = [];
+                try { roles = await fetchRoles(currentNovelId); } catch (e) {}
                 const analyzeR = await fetch(`${API_BASE}/api/analyze-only`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate, maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '' }),
+                    body: JSON.stringify({ title, content: ch.content, model: modelName, analyzeTemplate, maxScenes, llmApiUrl: llmCfg.apiUrl || '', llmApiKey: llmCfg.apiKey || '', roles }),
                     signal: aiAbortController.signal
                 });
                 if (!analyzeR.ok) throw new Error(`分析失败 HTTP ${analyzeR.status}`);
@@ -860,9 +871,10 @@
                     return;
                 }
 
-                // === 第二步：并发生图（最多3张同时） ===
+                // === 第二步：并发生图 ===
                 let insertedCount = 0, failedCount = 0;
-                const CONCURRENCY = 3;
+                // RunningHub 免费版并发上限低，降到 1；其他引擎保持 3
+                const CONCURRENCY = (engine === 'runninghub') ? 1 : 3;
                 const results = new Array(scenes.length);
 
                 async function genOne(i) {
@@ -871,28 +883,45 @@
                     const promptText = scene.prompt || '（无提示词）';
                     logLine(`⏳ 场景 ${i+1}/${scenes.length}: ${sceneLabel.slice(0,20)}...`);
                     const ts0 = Date.now();
-                    try {
-                        const genR = await fetch(`${API_BASE}/api/generate-scene`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                prompt: scene.prompt, negative_prompt: scene.negative_prompt || '',
-                                engine, workflowConfig, comfyUrl, scene: sceneLabel, anchor: scene.anchor || '',
-                                ...requestBody, novelId: currentNovelId
-                            }),
-                            signal: aiAbortController.signal
-                        });
-                        const genData = await genR.json();
-                        if (!genR.ok || !genData.success) throw new Error(genData.error || '生成失败');
-                        const imageUrl = genData.image?.url || genData.image;
+                    // RunningHub 免费版「队列满」自动重试（最多3次，间隔5s）
+                    const maxRetries = (engine === 'runninghub') ? 3 : 0;
+                    let lastErr = null;
+                    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                        try {
+                            if (attempt > 0) {
+                                logLine(`  ↻ 重试场景${i+1}（第${attempt}次，等待5s避让队列）...`);
+                                await new Promise(r => setTimeout(r, 5000));
+                            }
+                            const genR = await fetch(`${API_BASE}/api/generate-scene`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    prompt: scene.prompt, negative_prompt: scene.negative_prompt || '',
+                                    engine, workflowConfig, comfyUrl, scene: sceneLabel, anchor: scene.anchor || '',
+                                    ...requestBody, novelId: currentNovelId
+                                }),
+                                signal: aiAbortController.signal
+                            });
+                            const genData = await genR.json();
+                            if (!genR.ok || !genData.success) throw new Error(genData.error || '生成失败');
+                            const imageUrl = genData.image?.url || genData.image;
+                            const ts = Date.now() - ts0;
+                            logLine(`  ✅ 场景${i+1}成功（${t(ts)}）`);
+                            results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '' };
+                            insertedCount++;
+                            lastErr = null;
+                            break;
+                        } catch (sceneErr) {
+                            if (sceneErr.name === 'AbortError') throw sceneErr;
+                            lastErr = sceneErr;
+                            const isQueueFull = /TASK_QUEUE_MAXED|队列满|queue.*max/i.test(sceneErr.message || '');
+                            // 队列满可重试；其他错误不重试
+                            if (attempt >= maxRetries || !isQueueFull) break;
+                        }
+                    }
+                    if (lastErr) {
                         const ts = Date.now() - ts0;
-                        logLine(`  ✅ 场景${i+1}成功（${t(ts)}）`);
-                        results[i] = { ok: true, imageUrl, sceneLabel, promptText, anchor: scene.anchor || '' };
-                        insertedCount++;
-                    } catch (sceneErr) {
-                        if (sceneErr.name === 'AbortError') throw sceneErr;
-                        const ts = Date.now() - ts0;
-                        logLine(`  ❌ 场景${i+1}失败（${t(ts)}）: ${(sceneErr.message||'').slice(0,80)}`);
-                        results[i] = { ok: false, error: sceneErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '' };
+                        logLine(`  ❌ 场景${i+1}失败（${t(ts)}）: ${(lastErr.message||'').slice(0,80)}`);
+                        results[i] = { ok: false, error: lastErr.message || '生成失败', sceneLabel, promptText, anchor: scene.anchor || '' };
                         failedCount++;
                     }
                 }
@@ -1143,7 +1172,7 @@
         document.getElementById('aiIllustratorBtn').addEventListener('click', () => {
             modalTitle.textContent = '🎨 AI 配图工具';
             modalBody.innerHTML = `
-                <iframe src="ai-illustrator.html" style="width:100%;height:78vh;border:none;border-radius:6px;background:#0f0f1a;"></iframe>
+                <iframe src="ai-illustrator.html?novelId=${encodeURIComponent(currentNovelId || '')}" style="width:100%;height:78vh;border:none;border-radius:6px;background:#0f0f1a;"></iframe>
                 <div style="margin-top:8px;text-align:center;color:#666;font-size:13px;">
                     💡 独立配图工具，不会影响当前章节内容
                 </div>
@@ -1377,14 +1406,14 @@
             const bg = readerSettings.bgImage || '';
             const content = document.querySelector('.main-content');
             if (bg && content) {
-                // 渐变遮罩压在图上层，让文字更清晰
-                let op = parseFloat(readerSettings.bgOpacity);
-                if (isNaN(op) || op < 0 || op > 0.98) op = 0.88;
-                const dark = 'rgba(12,12,24,';
-                content.style.backgroundImage = `linear-gradient(${dark}${op}), ${dark}${op}), url(${bg})`;
-                content.style.backgroundSize = 'cover';
-                content.style.backgroundPosition = 'center';
-                content.style.backgroundAttachment = 'fixed';
+                // 用渐变遮罩压在图上层，让文字更清晰（第一个渐变在最上层）
+                const overlay = readerSettings.bgOpacity ?? 0.88;
+                const dark = `rgba(12,12,24,${overlay})`;
+                content.style.backgroundImage = `linear-gradient(${dark}, ${dark}), url(${bg})`;
+                content.style.backgroundSize = 'cover, cover';
+                content.style.backgroundPosition = 'center, center';
+                content.style.backgroundAttachment = 'fixed, fixed';
+                content.style.backgroundColor = 'rgba(15,15,26,1)';
                 content.style.backgroundBlendMode = 'normal';
                 content.style.cursor = 'default';
             } else if (content) {
@@ -1396,13 +1425,16 @@
         }
         document.getElementById('bgBtn').onclick = () => {
             const cur = readerSettings.bgImage;
-            const choice = prompt(cur ? '背景图：输入新URL 或"file"换本地图；留空清除；输入"透明 0.x"调节遮罩深浅' : '输入背景图URL，或输入"file"上传本地图片');
+            const choice = prompt(cur
+                ? `输入背景图URL（留空清除）；输入"file"上传本地；输入"透明 0.x"调节背景透明度(0.1-0.95，越大越暗)`
+                : '输入背景图URL，或输入"file"上传本地图片');
             if (choice === null) return;
             if (choice === 'file') { document.getElementById('bgFile').click(); return; }
-            if (choice.trim().startsWith('透明')) {
-                const v = parseFloat(choice.replace(/透明/g, '').trim());
-                if (!isNaN(v) && v >= 0 && v <= 1) { readerSettings.bgOpacity = v; applyReaderSettings(); applyBg(); showToast(`🖼️ 遮罩透明度已设为 ${v}`); }
-                else showToast('⚠️ 格式应为「透明 0.8」');
+            if (/^透明\s+0\.\d+$/i.test(choice.trim()) || /^透明\s+1$/.test(choice.trim())) {
+                const v = Math.min(0.95, Math.max(0.1, parseFloat(choice.trim().split(/\s+/)[1])));
+                readerSettings.bgOpacity = v;
+                applyBg();
+                showToast(`🖼️ 背景透明度已设为 ${Math.round(v*100)}% 遮罩`);
                 return;
             }
             if (choice === '') { readerSettings.bgImage = ''; }
@@ -1559,6 +1591,104 @@
                 body: JSON.stringify({ name })
             });
             await loadNovels();
+        });
+        // ===== 角色设定库（按小说，后端存储）=====
+        // 读取当前小说角色（roles 数组）
+        async function fetchRoles(novelId) {
+            try {
+                const r = await fetch(`${API_BASE}/api/roles?novelId=${encodeURIComponent(novelId || currentNovelId)}`);
+                const d = await r.json();
+                return d.success ? (d.roles || []) : [];
+            } catch (e) { return []; }
+        }
+        // 角色数组 → 文本（角色名：描述，每行一条）
+        function rolesToText(roles) {
+            return (roles || []).map(r => `${r.name}：${r.desc}`).join('\n');
+        }
+        // 文本 → 角色数组
+        function textToRoles(text) {
+            const out = [];
+            for (const line of (text || '').split('\n')) {
+                const s = line.trim();
+                if (!s) continue;
+                const idx = s.indexOf('：');
+                const idx2 = s.indexOf(':');
+                const sep = (idx !== -1 && (idx2 === -1 || idx < idx2)) ? idx : idx2;
+                if (sep === -1) continue;
+                const name = s.slice(0, sep).trim();
+                const desc = s.slice(sep + 1).trim();
+                if (name && desc) out.push({ name, desc });
+            }
+            return out;
+        }
+        // 角色设定库（当前小说）
+        document.getElementById('roleCardsBtn').addEventListener('click', async () => {
+            const cur = novels.find(n => n.id === currentNovelId);
+            if (!cur) { showToast('⚠️ 请先选择一本小说', 'warn'); return; }
+            const rolesArr = await fetchRoles(currentNovelId);
+            const current = rolesToText(rolesArr);
+            const input = prompt(
+                `为《${cur.name}》设置角色设定卡（每行一个，格式：角色名：外貌、服装、气质）\n\n当前已保存：\n${current || '（无）'}\n\n直接修改后确定保存：`,
+                current
+            );
+            if (input === null) return;
+            const newRoles = textToRoles(input);
+            try {
+                const r = await fetch(`${API_BASE}/api/roles`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ novelId: currentNovelId, roles: newRoles })
+                });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || '保存失败');
+                showToast(`✅ 已保存《${cur.name}》角色设定 ${newRoles.length} 条`, 'success');
+            } catch (e) {
+                showToast('❌ 保存失败: ' + e.message, 'error');
+            }
+        });
+        // ===== 导出当前小说（配图完整迁移）=====
+        document.getElementById('exportNovelBtn').addEventListener('click', async () => {
+            const cur = novels.find(n => n.id === currentNovelId);
+            if (!cur) { showToast('⚠️ 请先选择一本小说', 'warn'); return; }
+            try {
+                showToast('⏳ 正在打包导出...', 'info');
+                const r = await fetch(`${API_BASE}/api/novels/${currentNovelId}/export`);
+                const data = await r.json();
+                if (!data.success && !data.novel) throw new Error(data.error || '导出失败');
+                // 下载 JSON 文件
+                const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `《${cur.name}》配图导出.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                showToast(`✅ 已导出《${cur.name}》（含 ${data.chapters?.length || 0} 章、${Object.keys(data.images || {}).length} 张图）`, 'success');
+            } catch (e) {
+                showToast('❌ 导出失败: ' + e.message, 'error');
+            }
+        });
+        // ===== 导入小说（从导出文件恢复）=====
+        document.getElementById('importNovelBtn').addEventListener('click', () => document.getElementById('importNovelFile').click());
+        document.getElementById('importNovelFile').addEventListener('change', async (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+            try {
+                const text = await f.text();
+                const payload = JSON.parse(text);
+                if (payload.type !== 'novel-reader-export') throw new Error('不是有效的导出文件');
+                showToast('⏳ 正在导入（含图片恢复）...', 'info');
+                const r = await fetch(`${API_BASE}/api/novels/import`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || '导入失败');
+                await loadNovels();
+                await switchNovel(d.novel.id);
+                showToast(`✅ 已导入《${d.novel.name}》（${d.importedChapters} 章、${d.importedImages} 张图）`, 'success');
+            } catch (err) {
+                showToast('❌ 导入失败: ' + err.message, 'error');
+            }
+            e.target.value = '';
         });
         document.getElementById('delNovelBtn').addEventListener('click', async () => {
             if (!currentNovelId) return;
